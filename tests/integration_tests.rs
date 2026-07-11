@@ -61,6 +61,10 @@ fn make_policy(filter: Filter, conditions: Condition) -> Policy {
     }
 }
 
+fn get_deleted(service: &MockService) -> Vec<String> {
+    service.deleted.lock().unwrap().clone()
+}
+
 #[tokio::test]
 async fn when_space_low_and_torrents_eligible_then_should_delete_in_priority_order() {
     let torrents = vec![
@@ -68,7 +72,7 @@ async fn when_space_low_and_torrents_eligible_then_should_delete_in_priority_ord
         make_torrent(850_000, 3.0, 5_000_000_000, 10, "mid_dc"),
         make_torrent(800_000, 1.0, 5_000_000_000, 10, "lowest_dc"),
     ];
-    let service = MockService::new(torrents, 5_000_000_000);
+    let service = Arc::new(MockService::new(torrents, 5_000_000_000));
     let policy = make_policy(
         Filter::default(),
         Condition {
@@ -76,11 +80,11 @@ async fn when_space_low_and_torrents_eligible_then_should_delete_in_priority_ord
             ..Default::default()
         },
     );
-    let engine = Engine::new(Arc::new(service), false, Duration::ZERO);
+    let engine = Engine::new(Arc::clone(&service), false, Duration::ZERO);
 
     engine.run_policy(&policy).await.unwrap();
 
-    let deleted = engine.service().deleted.lock().unwrap().clone();
+    let deleted = get_deleted(&service);
 
     assert_eq!(deleted.len(), 1);
     assert_eq!(deleted[0], "highest_dc");
@@ -89,7 +93,7 @@ async fn when_space_low_and_torrents_eligible_then_should_delete_in_priority_ord
 #[tokio::test]
 async fn when_dry_run_then_should_not_delete() {
     let torrents = vec![make_torrent(900_000, 5.0, 5_000_000_000, 10, "torrent_a")];
-    let service = MockService::new(torrents, 0);
+    let service = Arc::new(MockService::new(torrents, 0));
     let policy = make_policy(
         Filter::default(),
         Condition {
@@ -97,11 +101,11 @@ async fn when_dry_run_then_should_not_delete() {
             ..Default::default()
         },
     );
-    let engine = Engine::new(Arc::new(service), true, Duration::ZERO);
+    let engine = Engine::new(Arc::clone(&service), true, Duration::ZERO);
 
     engine.run_policy(&policy).await.unwrap();
 
-    let deleted = engine.service().deleted.lock().unwrap().clone();
+    let deleted = get_deleted(&service);
 
     assert!(deleted.is_empty());
 }
@@ -112,7 +116,7 @@ async fn when_filter_excludes_all_then_should_not_delete() {
         make_torrent(900_000, 5.0, 5_000_000_000, 1, "few_seeds"),
         make_torrent(800_000, 1.0, 5_000_000_000, 1, "also_few_seeds"),
     ];
-    let service = MockService::new(torrents, 0);
+    let service = Arc::new(MockService::new(torrents, 0));
     let policy = make_policy(
         Filter {
             min_total_seeds: Some(100),
@@ -123,11 +127,11 @@ async fn when_filter_excludes_all_then_should_not_delete() {
             ..Default::default()
         },
     );
-    let engine = Engine::new(Arc::new(service), false, Duration::ZERO);
+    let engine = Engine::new(Arc::clone(&service), false, Duration::ZERO);
 
     engine.run_policy(&policy).await.unwrap();
 
-    let deleted = engine.service().deleted.lock().unwrap().clone();
+    let deleted = get_deleted(&service);
 
     assert!(deleted.is_empty());
 }
@@ -138,7 +142,7 @@ async fn when_no_conditions_met_then_should_not_delete() {
         make_torrent(900_000, 5.0, 5_000_000_000, 10, "torrent_a"),
         make_torrent(800_000, 1.0, 5_000_000_000, 10, "torrent_b"),
     ];
-    let service = MockService::new(torrents, 100_000_000_000);
+    let service = Arc::new(MockService::new(torrents, 100_000_000_000));
     let policy = make_policy(
         Filter::default(),
         Condition {
@@ -146,11 +150,11 @@ async fn when_no_conditions_met_then_should_not_delete() {
             ..Default::default()
         },
     );
-    let engine = Engine::new(Arc::new(service), false, Duration::ZERO);
+    let engine = Engine::new(Arc::clone(&service), false, Duration::ZERO);
 
     engine.run_policy(&policy).await.unwrap();
 
-    let deleted = engine.service().deleted.lock().unwrap().clone();
+    let deleted = get_deleted(&service);
 
     assert!(deleted.is_empty());
 }
@@ -162,7 +166,7 @@ async fn when_multiple_deletions_needed_then_should_delete_all_in_order() {
         make_torrent(850_000, 3.0, 1_000_000_000, 10, "mid_dc"),
         make_torrent(800_000, 1.0, 1_000_000_000, 10, "lowest_dc"),
     ];
-    let service = MockService::new(torrents, 0);
+    let service = Arc::new(MockService::new(torrents, 0));
     let policy = make_policy(
         Filter::default(),
         Condition {
@@ -170,11 +174,11 @@ async fn when_multiple_deletions_needed_then_should_delete_all_in_order() {
             ..Default::default()
         },
     );
-    let engine = Engine::new(Arc::new(service), false, Duration::ZERO);
+    let engine = Engine::new(Arc::clone(&service), false, Duration::ZERO);
 
     engine.run_policy(&policy).await.unwrap();
 
-    let deleted = engine.service().deleted.lock().unwrap().clone();
+    let deleted = get_deleted(&service);
 
     assert_eq!(deleted.len(), 2);
     assert_eq!(deleted[0], "highest_dc");

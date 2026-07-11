@@ -1,5 +1,5 @@
 use clap::Parser;
-use deluge_maintain::{CliConfig, Config, scheduler};
+use deluge_maintain::{CliConfig, Config, scheduler_start};
 use std::fs;
 use std::process;
 use std::time::Duration;
@@ -29,13 +29,9 @@ async fn run() -> anyhow::Result<()> {
 
     let config = Config::load(&config_contents)?;
 
-    tracing::debug!(
-        hosts = config.hosts.len(),
-        policies = config.policies.len(),
-        "loaded configuration"
-    );
+    tracing::debug!(?config, "loaded configuration");
 
-    scheduler::start(&config, cli.dry_run, Duration::from_secs(cli.delete_delay)).await?;
+    scheduler_start(&config, cli.dry_run, Duration::from_secs(cli.delete_delay)).await?;
 
     Ok(())
 }

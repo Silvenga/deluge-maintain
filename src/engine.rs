@@ -1,5 +1,4 @@
-use crate::policy::Policy;
-use crate::policy::condition::ConditionContext;
+use crate::policy::{ConditionContext, Policy};
 use crate::service::{DelugeService, TorrentEntry};
 use anyhow::Result;
 use std::cmp::Ordering;
@@ -20,7 +19,7 @@ pub enum DeletionResult {
     Impossible,
 }
 
-pub fn sort_by_deletion_priority(torrents: &mut [TorrentEntry], now: SystemTime) {
+pub(crate) fn sort_by_deletion_priority(torrents: &mut [TorrentEntry], now: SystemTime) {
     torrents.sort_by(|a, b| {
         let dc_cmp = b
             .distributed_copies
@@ -52,10 +51,6 @@ impl<S: DelugeService> Engine<S> {
             dry_run,
             delete_delay,
         }
-    }
-
-    pub fn service(&self) -> &S {
-        &self.service
     }
 
     pub fn plan_deletions(
