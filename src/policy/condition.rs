@@ -1,5 +1,6 @@
 use bytesize::ByteSize;
 use serde::Deserialize;
+use tracing::warn;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Condition {
@@ -19,9 +20,10 @@ impl Condition {
     pub fn is_met(&self, ctx: &ConditionContext) -> bool {
         if let Some(threshold) = self.available_space {
             if ctx.free_space < 0 {
-                tracing::warn!(
-                    free_space = ctx.free_space,
-                    "invalid negative free_space; available_space condition will not be met"
+                warn!(
+                    "Invalid negative free_space ({}); \
+                     available_space condition will not be met.",
+                    ctx.free_space
                 );
             }
             if ctx.free_space >= 0 && (ctx.free_space as u64) <= threshold.as_u64() {
@@ -31,9 +33,10 @@ impl Condition {
 
         if let Some(threshold) = self.used_space {
             if ctx.used_space < 0 {
-                tracing::warn!(
-                    used_space = ctx.used_space,
-                    "invalid negative used_space; used_space condition will not be met"
+                warn!(
+                    "Invalid negative used_space ({}); \
+                     used_space condition will not be met.",
+                    ctx.used_space
                 );
             }
             if ctx.used_space >= 0 && (ctx.used_space as u64) >= threshold.as_u64() {

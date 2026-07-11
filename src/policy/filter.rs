@@ -1,6 +1,7 @@
 use crate::service::TorrentEntry;
 use serde::Deserialize;
 use std::time::{Duration, SystemTime};
+use tracing::warn;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Filter {
@@ -24,10 +25,10 @@ impl Filter {
     pub fn matches(&self, torrent: &TorrentEntry, now: SystemTime) -> bool {
         if let Some(min_age) = self.age {
             if torrent.time_added < 0 {
-                tracing::warn!(
-                    info_hash = %torrent.info_hash,
-                    time_added = torrent.time_added,
-                    "invalid negative time_added; torrent will not match age filter"
+                warn!(
+                    "Torrent {} has invalid negative time_added ({}); \
+                     it will not match the age filter.",
+                    torrent.info_hash, torrent.time_added
                 );
                 return false;
             }
@@ -51,10 +52,10 @@ impl Filter {
 
         if let Some(min_seeds) = self.min_total_seeds {
             if torrent.total_seeds < 0 {
-                tracing::warn!(
-                    info_hash = %torrent.info_hash,
-                    total_seeds = torrent.total_seeds,
-                    "invalid negative total_seeds; torrent will not match seed filter"
+                warn!(
+                    "Torrent {} has invalid negative total_seeds ({}); \
+                     it will not match the seed filter.",
+                    torrent.info_hash, torrent.total_seeds
                 );
                 return false;
             }

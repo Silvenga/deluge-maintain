@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use deluge_rpc_client::models::{FilterDict, TorrentEntry as RpcTorrentEntry};
 use deluge_rpc_client::{DelugeClient, DelugeClientBuilder};
 
@@ -27,10 +27,7 @@ pub struct TorrentEntry {
     pub total_wanted: i64,
 }
 
-#[expect(
-    async_fn_in_trait,
-    reason = "using native async traits with generics, not trait objects"
-)]
+#[expect(async_fn_in_trait, reason = "internal use only")]
 pub trait DelugeService {
     async fn get_torrents(&self) -> Result<Vec<TorrentEntry>>;
     async fn get_free_space(&self) -> Result<i64>;
@@ -57,7 +54,7 @@ impl DelugeService for DelugeClientService {
             .torrents
             .get_torrents_status(&FilterDict::default(), &keys, false)
             .await
-            .map_err(|e| anyhow::anyhow!("failed to get torrents: {e}"))?;
+            .context("Failed to get torrents.")?;
 
         Ok(entries.into_iter().map(TorrentEntry::from).collect())
     }
@@ -68,7 +65,7 @@ impl DelugeService for DelugeClientService {
             .session
             .get_free_space(None)
             .await
-            .map_err(|e| anyhow::anyhow!("failed to get free space: {e}"))
+            .context("Failed to get free space.")
     }
 
     async fn remove_torrent(&self, hash: &str, remove_data: bool) -> Result<()> {
@@ -77,7 +74,7 @@ impl DelugeService for DelugeClientService {
             .torrents
             .remove_torrent(hash, remove_data)
             .await
-            .map_err(|e| anyhow::anyhow!("failed to remove torrent {hash}: {e}"))?;
+            .with_context(|| format!("Failed to remove torrent {hash}."))?;
         Ok(())
     }
 }

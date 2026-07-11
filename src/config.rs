@@ -1,31 +1,9 @@
 use crate::policy::{Condition, Filter};
-use clap::Parser;
+use anyhow::{bail, Context, Result};
 use croner::Cron;
 use serde::Deserialize;
 use std::fmt;
-use std::path::PathBuf;
 use std::str::FromStr;
-
-#[derive(Parser, Debug)]
-#[command(
-    name = "deluge-maintain",
-    version,
-    about = "A service that puts deluge on autopilot using retention policies",
-    author = "Mark Lopez <m@silvenga.com>"
-)]
-pub struct CliConfig {
-    /// Path to the TOML configuration file.
-    #[arg(long, env = "DELUGE_MAINTAIN_CONFIG")]
-    pub config: PathBuf,
-
-    /// Simulate policy enforcement without making changes.
-    #[arg(long, env = "DELUGE_MAINTAIN_DRY_RUN", default_value_t = false)]
-    pub dry_run: bool,
-
-    /// Delay between torrent deletions, in seconds.
-    #[arg(long, env = "DELUGE_MAINTAIN_DELETE_DELAY", default_value_t = 1)]
-    pub delete_delay: u64,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -34,32 +12,31 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(toml_str: &str) -> anyhow::Result<Self> {
-        let config: Config = toml::from_str(toml_str)
-            .map_err(|e| anyhow::anyhow!("failed to parse config file: {e}"))?;
+    pub fn load(toml_str: &str) -> Result<Self> {
+        let config: Config = toml::from_str(toml_str).context("Failed to parse config file.")?;
 
         if config.hosts.is_empty() {
-            anyhow::bail!("config must contain at least one host");
+            bail!("Config must contain at least one host.");
         }
 
         for host in &config.hosts {
             if host.name.is_empty() {
-                anyhow::bail!("host has an empty name");
+                bail!("Host has an empty name.");
             }
             if host.host.is_empty() {
-                anyhow::bail!("host '{}' has an empty host address", host.name);
+                bail!("Host '{}' has an empty host address.", host.name);
             }
             if host.port == 0 {
-                anyhow::bail!("host '{}' has port 0", host.name);
+                bail!("Host '{}' has port 0.", host.name);
             }
         }
 
         for policy in &config.policies {
             if policy.name.is_empty() {
-                anyhow::bail!("policy has an empty name");
+                bail!("Policy has an empty name.");
             }
-            Cron::from_str(&policy.cron).map_err(|e| {
-                anyhow::anyhow!("invalid cron expression for policy '{}': {e}", policy.name)
+            Cron::from_str(&policy.cron).with_context(|| {
+                format!("Invalid cron expression for policy '{}'", policy.name)
             })?;
         }
 

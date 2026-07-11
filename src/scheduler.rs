@@ -2,40 +2,65 @@ use crate::config::{Config, HostConfig, PolicyConfig};
 use crate::engine::Engine;
 use crate::policy::Policy;
 use crate::service::DelugeClientService;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::ctrl_c;
 use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
+use tracing::{info, warn};
 
-pub async fn start(config: &Config, dry_run: bool, delete_delay: Duration) -> Result<()> {
-    let mut sched = JobScheduler::new().await?;
+pub struct Scheduler {
+    config: Config,
+    dry_run: bool,
+    delete_delay: Duration,
+}
 
-    for policy_config in &config.policies {
-        let policy = convert_policy(policy_config);
-        let hosts = config.hosts.clone();
-
-        let job = Job::new_async(&policy_config.cron, move |_uuid, _l| {
-            let policy = policy.clone();
-            let hosts = hosts.clone();
-
-            Box::pin(async move {
-                run_policy_across_hosts(&policy, &hosts, dry_run, delete_delay).await;
-            })
-        })?;
-
-        sched.add(job).await?;
+impl Scheduler {
+    pub fn new(config: Config, dry_run: bool, delete_delay: Duration) -> Self {
+        Self {
+            config,
+            dry_run,
+            delete_delay,
+        }
     }
 
-    sched.start().await?;
+    pub async fn start(&self) -> Result<()> {
+        let mut sched = JobScheduler::new().await?;
 
-    tracing::info!("scheduler started, waiting for shutdown signal");
-    ctrl_c().await?;
-    tracing::info!("shutdown signal received, stopping scheduler");
-    sched.shutdown().await?;
+        for policy_config in &self.config.policies {
+            let job = Job::new_async(&policy_config.cron, {
+                let dry_run = self.dry_run;
+                let delete_delay = self.delete_delay;
+                let hosts = self.config.hosts.clone();
+                let policy = convert_policy(policy_config);
+                move |_uuid, _l| {
+                    let policy = policy.clone();
+                    let hosts = hosts.clone();
 
-    Ok(())
+                    Box::pin(async move {
+                        run_policy_across_hosts(&policy, &hosts, dry_run, delete_delay).await;
+                    })
+                }
+            })
+            .with_context(|| format!("Failed to create job '{}'", policy_config.name))?;
+
+            sched
+                .add(job)
+                .await
+                .with_context(|| format!("Failed to add job '{}'", policy_config.name))?;
+        }
+
+        sched.start().await?;
+        info!("Scheduler started, waiting for shutdown signal.");
+
+        ctrl_c().await?;
+        info!("Shutdown signal received, stopping scheduler.");
+
+        sched.shutdown().await?;
+
+        Ok(())
+    }
 }
 
 async fn run_policy_across_hosts(
@@ -45,10 +70,9 @@ async fn run_policy_across_hosts(
     delete_delay: Duration,
 ) {
     for host in hosts {
-        tracing::info!(
-            host = %host.name,
-            policy = %policy.name,
-            "running policy"
+        info!(
+            "Running policy '{}' for host '{}'.",
+            policy.name, host.name
         );
 
         let service = Arc::new(DelugeClientService::new(
@@ -64,18 +88,16 @@ async fn run_policy_across_hosts(
         match result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                tracing::warn!(
-                    host = %host.name,
-                    policy = %policy.name,
-                    error = %e,
-                    "policy execution failed"
+                warn!(
+                    "Policy '{}' failed for host '{}': {:#}",
+                    policy.name, host.name, e
                 );
             }
             Err(_) => {
-                tracing::warn!(
-                    host = %host.name,
-                    policy = %policy.name,
-                    "policy execution timed out after 300 seconds"
+                warn!(
+                    "Policy '{}' timed out for host '{}' after 300 seconds. \
+                     Check if the Deluge instance is responsive.",
+                    policy.name, host.name
                 );
             }
         }

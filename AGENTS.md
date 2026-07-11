@@ -2,42 +2,6 @@
 
 A service that connects to one or more Deluge instances and applies retention policies on a schedule.
 
-## Architecture
-
-### Config
-
-TOML config file loaded at startup. Path via `--config` CLI flag or `DELUGE_MAINTAIN_CONFIG` env var.
-
-```toml
-[[hosts]]
-name = "default"
-host = "deluge"
-port = 58846
-username = "localclient"
-password = "..."
-
-[[policies]]
-name = "default"
-cron = "0 */6 * * *"
-
-[policies.filter]
-age = "30d"
-ratio = 2.0
-completed = true
-min_total_seeds = 3
-min_distributed_copies = 1.0
-
-[policies.conditions]
-available_space = "50 GiB"
-used_space = "800 GiB"
-total_count = 500
-```
-
-### CLI
-
-- `--config` / `DELUGE_MAINTAIN_CONFIG` - path to TOML config (required)
-- `--dry-run` / `DELUGE_MAINTAIN_DRY_RUN` - simulate without deleting (default false)
-
 ## Policy Engine
 
 ### Cron Scheduling
@@ -124,7 +88,7 @@ Deletions always use `remove_data = true` (the goal is freeing disk space).
 
 ## Testing
 
-- **Unit tests** (in-module `#[cfg(test)]`): filter matching, condition checking, sort order, deletion planning
+- **Unit tests**: filter matching, condition checking, sort order, deletion planning
   (simulation). All use plain `TorrentStatus` structs - no RPC.
 - **Integration tests** (`tests/`): end-to-end engine pipeline with fixture data, verifying the full plan -> simulate ->
   verify cycle.
@@ -144,6 +108,25 @@ deletion plan. The RPC calls are in a separate method. This is the testable boun
 - Edition 2024, rust-version 1.85.
 - `humantime` + `humantime-serde` for durations, `bytesize` with serde feature for data sizes.
 - Tests use `when_<condition>_then_<action>_should_<expected>` naming, AAA structure with blank line separation.
+
+## Logging
+
+Use `tracing` for logging. Import the logging modules, e.g., `use tracing::info;` instead of using the absolute path,
+e.g., `tracing::info!("Logging...");`.
+
+Logging should always be in Sentence case (the first letter capitalized, proper names capitalized, using proper grammar,
+etc.).
+
+Logging Levels:
+
+- `error`: For reporting errors that are not expected to occur during normal operation and typically require human
+  intervention.
+- `warn`: For reporting non-critical (recoverable) issues that may indicate a problem, but do not typically require
+  human intervention.
+- `info`: For reporting general information about the application's state or progress. Should be useful for an end-user
+  to understand the application's behavior.
+- `debug`: For detailed information that is primarily useful to developers.
+- `trace`: For extremely detailed information required for low-level debugging.
 
 ## Commands
 

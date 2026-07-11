@@ -1,3 +1,4 @@
+use anyhow::Result;
 use deluge_maintain::{
     Condition, DeletionResult, DelugeService, Engine, Filter, Policy, TorrentEntry,
 };
@@ -21,15 +22,15 @@ impl MockService {
 }
 
 impl DelugeService for MockService {
-    async fn get_torrents(&self) -> anyhow::Result<Vec<TorrentEntry>> {
+    async fn get_torrents(&self) -> Result<Vec<TorrentEntry>> {
         Ok(self.torrents.clone())
     }
 
-    async fn get_free_space(&self) -> anyhow::Result<i64> {
+    async fn get_free_space(&self) -> Result<i64> {
         Ok(self.free_space)
     }
 
-    async fn remove_torrent(&self, hash: &str, _remove_data: bool) -> anyhow::Result<()> {
+    async fn remove_torrent(&self, hash: &str, _remove_data: bool) -> Result<()> {
         self.deleted.lock().unwrap().push(hash.to_owned());
         Ok(())
     }

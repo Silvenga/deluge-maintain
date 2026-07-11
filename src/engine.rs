@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
+use tracing::{error, info, warn};
 
 pub struct Engine<S: DelugeService> {
     service: Arc<S>,
@@ -17,31 +18,6 @@ pub enum DeletionResult {
     NothingToDo,
     Deletions(Vec<TorrentEntry>),
     Impossible,
-}
-
-pub(crate) fn sort_by_deletion_priority(torrents: &mut [TorrentEntry], now: SystemTime) {
-    torrents.sort_by(|a, b| {
-        let dc_cmp = b
-            .distributed_copies
-            .partial_cmp(&a.distributed_copies)
-            .unwrap_or(Ordering::Equal);
-
-        if dc_cmp != Ordering::Equal {
-            return dc_cmp;
-        }
-
-        let age_a = now
-            .duration_since(SystemTime::UNIX_EPOCH + Duration::from_secs(a.time_added as u64))
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-
-        let age_b = now
-            .duration_since(SystemTime::UNIX_EPOCH + Duration::from_secs(b.time_added as u64))
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-
-        age_b.cmp(&age_a)
-    });
 }
 
 impl<S: DelugeService> Engine<S> {
@@ -79,9 +55,10 @@ impl<S: DelugeService> Engine<S> {
             .collect();
 
         if filtered.is_empty() {
-            tracing::warn!(
-                policy = %policy.name,
-                "conditions are met but no torrents pass the filter"
+            warn!(
+                "Conditions are met for policy '{}' but no torrents pass the filter. \
+                 Consider relaxing filter criteria.",
+                policy.name
             );
             return DeletionResult::Impossible;
         }
@@ -112,9 +89,10 @@ impl<S: DelugeService> Engine<S> {
         }
 
         if to_delete.is_empty() {
-            tracing::warn!(
-                policy = %policy.name,
-                "conditions are met but no torrents were selected for deletion"
+            warn!(
+                "Conditions are met for policy '{}' but no torrents were selected for deletion. \
+                 Consider relaxing filter criteria.",
+                policy.name
             );
             return DeletionResult::Impossible;
         }
@@ -126,9 +104,10 @@ impl<S: DelugeService> Engine<S> {
         };
 
         if policy.conditions.is_met(&final_ctx) {
-            tracing::warn!(
-                policy = %policy.name,
-                "conditions cannot be satisfied even after deleting all filtered torrents"
+            warn!(
+                "Conditions cannot be satisfied for policy '{}' even after deleting all filtered \
+                 torrents. Consider adjusting condition thresholds or filter criteria.",
+                policy.name
             );
             return DeletionResult::Impossible;
         }
@@ -142,7 +121,10 @@ impl<S: DelugeService> Engine<S> {
         let torrents = match self.service.get_torrents().await {
             Ok(t) => t,
             Err(e) => {
-                tracing::warn!(policy = %policy.name, error = %e, "failed to fetch torrents, skipping");
+                warn!(
+                    "Failed to fetch torrents for policy '{}': {:#}. Skipping.",
+                    policy.name, e
+                );
                 return Ok(());
             }
         };
@@ -150,7 +132,10 @@ impl<S: DelugeService> Engine<S> {
         let free_space = match self.service.get_free_space().await {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!(policy = %policy.name, error = %e, "failed to fetch free space, skipping");
+                warn!(
+                    "Failed to fetch free space for policy '{}': {:#}. Skipping.",
+                    policy.name, e
+                );
                 return Ok(());
             }
         };
@@ -159,38 +144,47 @@ impl<S: DelugeService> Engine<S> {
 
         match plan {
             DeletionResult::NothingToDo => {
-                tracing::info!(policy = %policy.name, "no conditions met, nothing to do");
+                info!(
+                    "No conditions met for policy '{}', nothing to do.",
+                    policy.name
+                );
             }
             DeletionResult::Impossible => {
-                tracing::warn!(policy = %policy.name, "conditions cannot be satisfied");
+                warn!(
+                    "Conditions cannot be satisfied for policy '{}'. \
+                     Consider adjusting condition thresholds or filter criteria.",
+                    policy.name
+                );
             }
             DeletionResult::Deletions(to_delete) => {
-                tracing::info!(
-                    policy = %policy.name,
-                    count = to_delete.len(),
-                    dry_run = self.dry_run,
-                    "planned deletions"
+                info!(
+                    "Planned {} deletion(s) for policy '{}' (dry_run: {}).",
+                    to_delete.len(),
+                    policy.name,
+                    self.dry_run
                 );
 
                 for (i, torrent) in to_delete.iter().enumerate() {
-                    tracing::info!(
-                        policy = %policy.name,
-                        hash = %torrent.info_hash,
-                        name = %torrent.name,
-                        distributed_copies = torrent.distributed_copies,
-                        total_wanted = torrent.total_wanted,
-                        dry_run = self.dry_run,
-                        "deleting torrent"
+                    info!(
+                        "Deleting torrent '{}' (hash: {}, distributed_copies: {}, \
+                         total_wanted: {}) for policy '{}' (dry_run: {}).",
+                        torrent.name,
+                        torrent.info_hash,
+                        torrent.distributed_copies,
+                        torrent.total_wanted,
+                        policy.name,
+                        self.dry_run
                     );
 
                     if !self.dry_run {
                         if let Err(e) = self.service.remove_torrent(&torrent.info_hash, true).await
                         {
-                            tracing::error!(
-                                policy = %policy.name,
-                                hash = %torrent.info_hash,
-                                error = %e,
-                                "failed to delete torrent"
+                            error!(
+                                "Failed to delete torrent '{}' (hash: {}) for policy '{}': {:#}",
+                                torrent.name,
+                                torrent.info_hash,
+                                policy.name,
+                                e
                             );
                         }
                         if i + 1 < to_delete.len() {
@@ -203,6 +197,31 @@ impl<S: DelugeService> Engine<S> {
 
         Ok(())
     }
+}
+
+fn sort_by_deletion_priority(torrents: &mut [TorrentEntry], now: SystemTime) {
+    torrents.sort_by(|a, b| {
+        let dc_cmp = b
+            .distributed_copies
+            .partial_cmp(&a.distributed_copies)
+            .unwrap_or(Ordering::Equal);
+
+        if dc_cmp != Ordering::Equal {
+            return dc_cmp;
+        }
+
+        let age_a = now
+            .duration_since(SystemTime::UNIX_EPOCH + Duration::from_secs(a.time_added as u64))
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let age_b = now
+            .duration_since(SystemTime::UNIX_EPOCH + Duration::from_secs(b.time_added as u64))
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        age_b.cmp(&age_a)
+    });
 }
 
 #[cfg(test)]
