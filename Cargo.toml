@@ -1,0 +1,59 @@
+[package]
+name = "deluge-maintain"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+authors = ["Mark Lopez <m@silvenga.com>"]
+description = "A service that puts deluge on autopilot using retention policies"
+repository = "https://github.com/Silvenga/deluge-maintain"
+homepage = "https://github.com/Silvenga/deluge-maintain"
+documentation = "https://github.com/Silvenga/deluge-maintain"
+readme = "README.md"
+keywords = ["deluge", "retention", "maintenance", "torrent"]
+categories = ["command-line-utilities"]
+
+[lints.clippy]
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+create_dir = "warn"
+else_if_without_else = "warn"
+filetype_is_file = "warn"
+infinite_loop = "warn"
+undocumented_unsafe_blocks = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+
+# Pedantic
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+get_unwrap = "warn"
+iter_over_hash_type = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+redundant_test_prefix = "warn"
+redundant_type_annotations = "warn"
+str_to_string = "warn"
+todo = "warn"
+unneeded_field_pattern = "warn"
+wildcard_dependencies = "warn"
+redundant_feature_names = "warn"
+negative_feature_names = "warn"
+cargo_common_metadata = "warn"
+absolute_paths = "warn"
+
+[dependencies]
+anyhow = "1.0.103"
+bytesize = { version = "2.4.2", features = ["serde"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
+croner = "3.0.1"
+deluge-rpc-client = "0.2.0"
+humantime = "2.4.0"
+humantime-serde = "1.1.1"
+log-panics = { version = "2.1.0", features = ["with-backtrace"] }
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "time"] }
+tokio-cron-scheduler = "0.15.1"
+toml = "1.1.2"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }

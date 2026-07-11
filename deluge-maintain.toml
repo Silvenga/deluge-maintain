@@ -1,0 +1,47 @@
+# One or more Deluge instances to manage. Each host is a separate daemon connection.
+[[hosts]]
+# Display name shown in logs.
+name = "default"
+# Hostname or IP address of the Deluge daemon.
+host = "127.0.0.1"
+# Port the Deluge daemon listens on.
+port = 58846
+# RPC username.
+username = "localclient"
+# RPC password.
+password = "password"
+
+# One or more policies to apply to all hosts.
+[[policies]]
+# Display name shown in logs.
+name = "default"
+# Cron expression for when to run this policy (5-field or 6-field with seconds).
+# Example: every hour.
+cron = "0 */1 * * *"
+
+# A torrent must match every specified filter to be eligible for deletion. All optional.
+# If no filters are specified, all torrents are eligible.
+[policies.filter]
+# Minimum time since the torrent was added.
+# Examples: "30d", "1h 30m", "7days".
+# age = "30d"
+# Minimum seeding ratio.
+# ratio = 2.0
+# Only consider completed torrents (is_finished). Default: true.
+# completed = true
+# Minimum total seeds in the swarm (from tracker).
+# min_total_seeds = 3
+# Minimum distributed copies in the swarm (e.g., 2 = 2 full copies across the swarm).
+# min_distributed_copies = 1.0
+
+# When should the policy be invoked?
+# If any condition is true when the policy is scheduled to run, cleanup will execute.
+# At least one condition is required for the policy to be effective.
+[policies.conditions]
+# Free space at or below this threshold triggers cleanup.
+# Examples: "50 GiB", "100 GB", "1 TiB".
+# available_space = "50 GiB"
+# Used space (sum of the space all torrents are using).
+# used_space = "800 GiB"
+# Total torrent count.
+# total_count = 2000
