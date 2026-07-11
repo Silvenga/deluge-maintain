@@ -67,7 +67,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct HostConfig {
     pub name: String,
     pub host: String,
@@ -85,18 +85,6 @@ impl fmt::Debug for HostConfig {
             .field("username", &self.username)
             .field("password", &"<redacted>")
             .finish()
-    }
-}
-
-impl Clone for HostConfig {
-    fn clone(&self) -> Self {
-        Self {
-            name: self.name.clone(),
-            host: self.host.clone(),
-            port: self.port,
-            username: self.username.clone(),
-            password: self.password.clone(),
-        }
     }
 }
 
