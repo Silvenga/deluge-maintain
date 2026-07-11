@@ -23,6 +23,14 @@ fn default_true() -> bool {
 impl Filter {
     pub fn matches(&self, torrent: &TorrentEntry, now: SystemTime) -> bool {
         if let Some(min_age) = self.age {
+            if torrent.time_added < 0 {
+                tracing::warn!(
+                    info_hash = %torrent.info_hash,
+                    time_added = torrent.time_added,
+                    "invalid negative time_added; torrent will not match age filter"
+                );
+                return false;
+            }
             let added = SystemTime::UNIX_EPOCH + Duration::from_secs(torrent.time_added as u64);
             let age = now.duration_since(added).unwrap_or_default();
             if age < min_age {
@@ -31,8 +39,8 @@ impl Filter {
         }
 
         if let Some(min_ratio) = self.ratio {
-            let ratio = torrent.ratio.unwrap_or(f64::INFINITY) as f32;
-            if ratio < min_ratio {
+            let ratio = torrent.ratio.unwrap_or(f64::INFINITY);
+            if ratio < (min_ratio as f64) {
                 return false;
             }
         }
@@ -42,13 +50,21 @@ impl Filter {
         }
 
         if let Some(min_seeds) = self.min_total_seeds {
-            if (torrent.total_seeds as u32) < min_seeds {
+            if torrent.total_seeds < 0 {
+                tracing::warn!(
+                    info_hash = %torrent.info_hash,
+                    total_seeds = torrent.total_seeds,
+                    "invalid negative total_seeds; torrent will not match seed filter"
+                );
+                return false;
+            }
+            if torrent.total_seeds < (min_seeds as i64) {
                 return false;
             }
         }
 
         if let Some(min_dc) = self.min_distributed_copies {
-            if (torrent.distributed_copies as f32) < min_dc {
+            if torrent.distributed_copies < (min_dc as f64) {
                 return false;
             }
         }
@@ -122,6 +138,18 @@ mod tests {
     }
 
     #[test]
+    fn when_age_filter_and_negative_time_added_then_should_not_match() {
+        let filter = Filter {
+            age: Some(age_dur(50_000)),
+            ..Default::default()
+        };
+        let mut torrent = make_torrent();
+        torrent.time_added = -1;
+
+        assert!(!filter.matches(&torrent, now()));
+    }
+
+    #[test]
     fn when_ratio_filter_and_ratio_below_threshold_then_should_not_match() {
         let filter = Filter {
             ratio: Some(3.0),
@@ -174,6 +202,18 @@ mod tests {
             ..Default::default()
         };
         let torrent = make_torrent();
+
+        assert!(!filter.matches(&torrent, now()));
+    }
+
+    #[test]
+    fn when_min_total_seeds_filter_and_negative_seeds_then_should_not_match() {
+        let filter = Filter {
+            min_total_seeds: Some(20),
+            ..Default::default()
+        };
+        let mut torrent = make_torrent();
+        torrent.total_seeds = -1;
 
         assert!(!filter.matches(&torrent, now()));
     }

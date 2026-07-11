@@ -1,14 +1,16 @@
 use crate::config::{Config, HostConfig, PolicyConfig};
 use crate::engine::Engine;
-use crate::policy::{Condition, Filter, Policy};
+use crate::policy::Policy;
 use crate::service::DelugeClientService;
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::signal::ctrl_c;
+use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 pub async fn start(config: &Config, dry_run: bool, delete_delay: Duration) -> Result<()> {
-    let sched = JobScheduler::new().await?;
+    let mut sched = JobScheduler::new().await?;
 
     for policy_config in &config.policies {
         let policy = convert_policy(policy_config);
@@ -27,6 +29,11 @@ pub async fn start(config: &Config, dry_run: bool, delete_delay: Duration) -> Re
     }
 
     sched.start().await?;
+
+    tracing::info!("scheduler started, waiting for shutdown signal");
+    ctrl_c().await?;
+    tracing::info!("shutdown signal received, stopping scheduler");
+    sched.shutdown().await?;
 
     Ok(())
 }
@@ -52,13 +59,25 @@ async fn run_policy_across_hosts(
         ));
         let engine = Engine::new(service, dry_run, delete_delay);
 
-        if let Err(e) = engine.run_policy(policy).await {
-            tracing::warn!(
-                host = %host.name,
-                policy = %policy.name,
-                error = %e,
-                "policy execution failed"
-            );
+        let result = timeout(Duration::from_secs(300), engine.run_policy(policy)).await;
+
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::warn!(
+                    host = %host.name,
+                    policy = %policy.name,
+                    error = %e,
+                    "policy execution failed"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    host = %host.name,
+                    policy = %policy.name,
+                    "policy execution timed out after 300 seconds"
+                );
+            }
         }
     }
 }
@@ -66,17 +85,7 @@ async fn run_policy_across_hosts(
 fn convert_policy(config: &PolicyConfig) -> Policy {
     Policy {
         name: config.name.clone(),
-        filter: Filter {
-            age: config.filter.age,
-            ratio: config.filter.ratio,
-            completed: config.filter.completed,
-            min_total_seeds: config.filter.min_total_seeds,
-            min_distributed_copies: config.filter.min_distributed_copies,
-        },
-        conditions: Condition {
-            available_space: config.conditions.available_space,
-            used_space: config.conditions.used_space,
-            total_count: config.conditions.total_count,
-        },
+        filter: config.filter.clone(),
+        conditions: config.conditions.clone(),
     }
 }

@@ -2,6 +2,7 @@ use crate::policy::{Condition, Filter};
 use clap::Parser;
 use croner::Cron;
 use serde::Deserialize;
+use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -37,7 +38,26 @@ impl Config {
         let config: Config = toml::from_str(toml_str)
             .map_err(|e| anyhow::anyhow!("failed to parse config file: {e}"))?;
 
+        if config.hosts.is_empty() {
+            anyhow::bail!("config must contain at least one host");
+        }
+
+        for host in &config.hosts {
+            if host.name.is_empty() {
+                anyhow::bail!("host has an empty name");
+            }
+            if host.host.is_empty() {
+                anyhow::bail!("host '{}' has an empty host address", host.name);
+            }
+            if host.port == 0 {
+                anyhow::bail!("host '{}' has port 0", host.name);
+            }
+        }
+
         for policy in &config.policies {
+            if policy.name.is_empty() {
+                anyhow::bail!("policy has an empty name");
+            }
             Cron::from_str(&policy.cron).map_err(|e| {
                 anyhow::anyhow!("invalid cron expression for policy '{}': {e}", policy.name)
             })?;
@@ -47,13 +67,25 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct HostConfig {
     pub name: String,
     pub host: String,
     pub port: u16,
     pub username: String,
     pub password: String,
+}
+
+impl fmt::Debug for HostConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HostConfig")
+            .field("name", &self.name)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -170,5 +202,94 @@ total_count = 500
             Some(bytesize::ByteSize::gib(50))
         );
         assert_eq!(config.policies[0].conditions.total_count, Some(500));
+    }
+
+    #[test]
+    fn when_no_hosts_then_should_fail() {
+        let toml = r#"
+[[policies]]
+name = "default"
+cron = "0 */6 * * *"
+"#;
+
+        let result = Config::load(toml);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn when_empty_host_address_then_should_fail() {
+        let toml = r#"
+[[hosts]]
+name = "test"
+host = ""
+port = 58846
+username = "localclient"
+password = "secret"
+
+[[policies]]
+name = "default"
+cron = "0 */6 * * *"
+"#;
+
+        let result = Config::load(toml);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn when_port_zero_then_should_fail() {
+        let toml = r#"
+[[hosts]]
+name = "test"
+host = "127.0.0.1"
+port = 0
+username = "localclient"
+password = "secret"
+
+[[policies]]
+name = "default"
+cron = "0 */6 * * *"
+"#;
+
+        let result = Config::load(toml);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn when_empty_policy_name_then_should_fail() {
+        let toml = r#"
+[[hosts]]
+name = "test"
+host = "127.0.0.1"
+port = 58846
+username = "localclient"
+password = "secret"
+
+[[policies]]
+name = ""
+cron = "0 */6 * * *"
+"#;
+
+        let result = Config::load(toml);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn when_host_config_debug_then_password_should_be_redacted() {
+        let host = HostConfig {
+            name: "test".to_owned(),
+            host: "127.0.0.1".to_owned(),
+            port: 58846,
+            username: "user".to_owned(),
+            password: "secret".to_owned(),
+        };
+
+        let debug_output = format!("{host:?}");
+
+        assert!(!debug_output.contains("secret"));
+        assert!(debug_output.contains("<redacted>"));
     }
 }
