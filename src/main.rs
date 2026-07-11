@@ -29,7 +29,11 @@ async fn run() -> anyhow::Result<()> {
 
     let config = Config::load(&config_contents)?;
 
-    tracing::debug!(?config, "loaded configuration");
+    tracing::debug!(
+        hosts = config.hosts.len(),
+        policies = config.policies.len(),
+        "loaded configuration"
+    );
 
     scheduler::start(&config, cli.dry_run, Duration::from_secs(cli.delete_delay)).await?;
 

@@ -177,7 +177,7 @@ impl<S: DelugeService> Engine<S> {
                     "planned deletions"
                 );
 
-                for torrent in &to_delete {
+                for (i, torrent) in to_delete.iter().enumerate() {
                     tracing::info!(
                         policy = %policy.name,
                         hash = %torrent.info_hash,
@@ -198,7 +198,9 @@ impl<S: DelugeService> Engine<S> {
                                 "failed to delete torrent"
                             );
                         }
-                        sleep(self.delete_delay).await;
+                        if i + 1 < to_delete.len() {
+                            sleep(self.delete_delay).await;
+                        }
                     }
                 }
             }
