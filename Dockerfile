@@ -17,8 +17,7 @@ RUN groupadd --gid 1000 user && useradd --uid 1000 --gid 1000 --no-create-home -
 COPY --from=builder /app/target/release/deluge-maintain /usr/local/bin/deluge-maintain
 
 VOLUME ["/config"]
-ENV DELUGE_MAINTAIN_CONFIG=/config/deluge-maintain.toml \
-    RUST_LOG=info
+ENV DELUGE_MAINTAIN_CONFIG=/config/deluge-maintain.toml
 
 USER user
 STOPSIGNAL SIGINT
