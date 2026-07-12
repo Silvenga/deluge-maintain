@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::signal::ctrl_c;
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{info, warn};
@@ -26,6 +27,8 @@ impl<E: Engine + 'static> Scheduler<E> {
     pub async fn start(&self) -> Result<()> {
         self.non_blocking_check_hosts().await;
 
+        let run_lock = Arc::new(Mutex::new(()));
+
         let mut sched = JobScheduler::new().await?;
 
         for policy in &self.config.policies {
@@ -38,11 +41,23 @@ impl<E: Engine + 'static> Scheduler<E> {
                 let hosts = self.config.hosts.clone();
                 let engine = self.engine.clone();
                 let timeout = self.policy_timeout;
+                let run_lock = run_lock.clone();
                 move |_uuid, _l| {
                     let policy = policy.clone();
                     let hosts = hosts.clone();
                     let engine = engine.clone();
+                    let run_lock = run_lock.clone();
                     Box::pin(async move {
+                        let _guard = match run_lock.try_lock() {
+                            Ok(guard) => guard,
+                            Err(_) => {
+                                warn!(
+                                    "Policy '{}' skipped, another policy is already running.",
+                                    policy.name
+                                );
+                                return;
+                            }
+                        };
                         run_policy_across_hosts(&policy, &hosts, engine.clone(), timeout).await;
                     })
                 }
