@@ -24,6 +24,8 @@ impl<E: Engine + 'static> Scheduler<E> {
     }
 
     pub async fn start(&self) -> Result<()> {
+        self.non_blocking_check_hosts().await;
+
         let mut sched = JobScheduler::new().await?;
 
         for policy in &self.config.policies {
@@ -62,6 +64,21 @@ impl<E: Engine + 'static> Scheduler<E> {
         sched.shutdown().await?;
 
         Ok(())
+    }
+
+    async fn non_blocking_check_hosts(&self) {
+        tokio::spawn({
+            let hosts = self.config.hosts.clone();
+            let engine = self.engine.clone();
+            async move {
+                for host in &hosts {
+                    match engine.check_connection(host).await {
+                        Ok(()) => info!("Connection test '{}': OK", host.name),
+                        Err(e) => warn!("Connection test '{}': Failed, {:#}", host.name, e),
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -183,6 +200,11 @@ mod tests {
             .withf(|policy, host| policy.name == "test-policy" && host.name == "test-host")
             .times(1)
             .returning(|_, _| Ok(()));
+        engine
+            .expect_check_connection()
+            .withf(|host| host.name == "test-host")
+            .times(1)
+            .returning(|_| Ok(()));
 
         let scheduler = Scheduler::new(config, engine, Duration::from_secs(300));
 
@@ -201,6 +223,7 @@ mod tests {
         #[async_trait::async_trait]
         impl Engine for Engine {
             async fn run_policy(&self, policy: &Policy, host: &HostConfig) -> anyhow::Result<()>;
+            async fn check_connection(&self, host: &HostConfig) -> anyhow::Result<()>;
         }
     }
 

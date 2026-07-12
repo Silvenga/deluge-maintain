@@ -10,6 +10,8 @@ use tracing::{info, warn};
 #[async_trait]
 pub trait Engine: Send + Sync {
     async fn run_policy(&self, policy: &Policy, host: &HostConfig) -> anyhow::Result<()>;
+
+    async fn check_connection(&self, host: &HostConfig) -> anyhow::Result<()>;
 }
 
 pub struct DelugeClientEngine<F: DelugeServiceFactory> {
@@ -99,6 +101,19 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn check_connection(&self, host: &HostConfig) -> anyhow::Result<()> {
+        let service =
+            self.service_factory
+                .create(&host.host, host.port, &host.username, &host.password);
+
+        service
+            .get_torrents()
+            .await
+            .context("Failed to connect to Deluge instance.")?;
 
         Ok(())
     }
