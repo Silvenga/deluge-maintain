@@ -14,20 +14,6 @@ const TORRENT_FIELDS: &[&str] = &[
     "total_wanted",
 ];
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TorrentEntry {
-    pub info_hash: String,
-    pub name: String,
-    pub time_added: i64,
-    pub ratio: Option<f64>,
-    pub is_finished: bool,
-    pub total_seeds: i64,
-    pub total_peers: i64,
-    pub distributed_copies: f64,
-    pub total_wanted: i64,
-}
-
-#[expect(async_fn_in_trait, reason = "internal use only")]
 pub trait DelugeService {
     async fn get_torrents(&self) -> Result<Vec<TorrentEntry>>;
     async fn get_free_space(&self) -> Result<i64>;
@@ -77,6 +63,19 @@ impl DelugeService for DelugeClientService {
             .with_context(|| format!("Failed to remove torrent {hash}."))?;
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TorrentEntry {
+    pub info_hash: String,
+    pub name: String,
+    pub time_added: i64,
+    pub ratio: Option<f64>,
+    pub is_finished: bool,
+    pub total_seeds: i64,
+    pub total_peers: i64,
+    pub distributed_copies: f64,
+    pub total_wanted: i64,
 }
 
 impl From<RpcTorrentEntry> for TorrentEntry {

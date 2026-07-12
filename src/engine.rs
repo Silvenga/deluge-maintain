@@ -1,4 +1,4 @@
-use crate::policy::{ConditionContext, Policy};
+use crate::config::{ConditionContext, Policy};
 use crate::service::{DelugeService, TorrentEntry};
 use anyhow::Result;
 use std::cmp::Ordering;
@@ -181,10 +181,7 @@ impl<S: DelugeService> Engine<S> {
                         {
                             error!(
                                 "Failed to delete torrent '{}' (hash: {}) for policy '{}': {:#}",
-                                torrent.name,
-                                torrent.info_hash,
-                                policy.name,
-                                e
+                                torrent.name, torrent.info_hash, policy.name, e
                             );
                         }
                         if i + 1 < to_delete.len() {
@@ -227,7 +224,7 @@ fn sort_by_deletion_priority(torrents: &mut [TorrentEntry], now: SystemTime) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::policy::{Condition, Filter};
+    use crate::config::{Condition, Filter};
     use crate::service::DelugeClientService;
     use std::time::Duration as StdDuration;
 
@@ -252,6 +249,7 @@ mod tests {
     fn make_policy(conditions: Condition) -> Policy {
         Policy {
             name: "test".to_owned(),
+            cron: "*/1 * * * *".to_owned(),
             filter: Filter::default(),
             conditions,
         }
@@ -301,6 +299,7 @@ mod tests {
     fn when_conditions_met_but_no_torrents_pass_filter_then_should_return_impossible() {
         let policy = Policy {
             name: "test".to_owned(),
+            cron: "*/1 * * * *".to_owned(),
             filter: Filter {
                 min_distributed_copies: Some(100.0),
                 ..Default::default()

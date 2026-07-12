@@ -42,6 +42,9 @@ negative_feature_names = "warn"
 cargo_common_metadata = "warn"
 absolute_paths = "warn"
 
+# Annoys me
+module_inception = "allow"
+
 [dependencies]
 anyhow = "1.0.103"
 bytesize = { version = "2.4.2", features = ["serde"] }

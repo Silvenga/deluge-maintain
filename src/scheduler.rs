@@ -1,6 +1,5 @@
-use crate::config::{Config, HostConfig, PolicyConfig};
+use crate::config::{Config, HostConfig, Policy};
 use crate::engine::Engine;
-use crate::policy::Policy;
 use crate::service::DelugeClientService;
 use anyhow::{Context, Result};
 use std::sync::Arc;
@@ -28,12 +27,12 @@ impl Scheduler {
     pub async fn start(&self) -> Result<()> {
         let mut sched = JobScheduler::new().await?;
 
-        for policy_config in &self.config.policies {
-            let job = Job::new_async(&policy_config.cron, {
+        for policy in &self.config.policies {
+            let job = Job::new_async(&policy.cron, {
                 let dry_run = self.dry_run;
                 let delete_delay = self.delete_delay;
                 let hosts = self.config.hosts.clone();
-                let policy = convert_policy(policy_config);
+                let policy = policy.clone();
                 move |_uuid, _l| {
                     let policy = policy.clone();
                     let hosts = hosts.clone();
@@ -43,12 +42,12 @@ impl Scheduler {
                     })
                 }
             })
-            .with_context(|| format!("Failed to create job '{}'", policy_config.name))?;
+            .with_context(|| format!("Failed to create job '{}'", policy.name))?;
 
             sched
                 .add(job)
                 .await
-                .with_context(|| format!("Failed to add job '{}'", policy_config.name))?;
+                .with_context(|| format!("Failed to add job '{}'", policy.name))?;
         }
 
         sched.start().await?;
@@ -70,10 +69,7 @@ async fn run_policy_across_hosts(
     delete_delay: Duration,
 ) {
     for host in hosts {
-        info!(
-            "Running policy '{}' for host '{}'.",
-            policy.name, host.name
-        );
+        info!("Running policy '{}' for host '{}'.", policy.name, host.name);
 
         let service = Arc::new(DelugeClientService::new(
             &host.host,
@@ -101,13 +97,5 @@ async fn run_policy_across_hosts(
                 );
             }
         }
-    }
-}
-
-fn convert_policy(config: &PolicyConfig) -> Policy {
-    Policy {
-        name: config.name.clone(),
-        filter: config.filter.clone(),
-        conditions: config.conditions.clone(),
     }
 }

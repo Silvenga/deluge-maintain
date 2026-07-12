@@ -1,4 +1,5 @@
-use crate::{Config, Scheduler};
+use crate::config::Config;
+use crate::scheduler::Scheduler;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::fs;
@@ -31,19 +32,21 @@ pub struct Cli;
 
 impl Cli {
     pub async fn run() -> Result<()> {
-        let cli = CliConfig::parse();
-
-        let config_contents = fs::read_to_string(&cli.config)
-            .with_context(|| format!("Failed to read config file {}.", cli.config.display()))?;
-
-        let config = Config::load(&config_contents)?;
-
-        debug!("Loaded configuration: {:#?}.", config);
-
+        let (cli, config) = build_config().await?;
         Scheduler::new(config, cli.dry_run, Duration::from_secs(cli.delete_delay))
             .start()
             .await?;
-
         Ok(())
     }
+}
+
+async fn build_config() -> Result<(CliConfig, Config)> {
+    let cli = CliConfig::parse();
+
+    let config_contents = fs::read_to_string(&cli.config)
+        .with_context(|| format!("Failed to read config file {}.", cli.config.display()))?;
+    let config = Config::load(&config_contents)?;
+
+    debug!("Loaded configuration: {:#?}.", config);
+    Ok((cli, config))
 }

@@ -1,18 +1,17 @@
-use crate::policy::{Condition, Filter};
-use anyhow::{bail, Context, Result};
+use crate::config::{HostConfig, Policy};
+use anyhow::{bail, Context};
 use croner::Cron;
 use serde::Deserialize;
-use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub hosts: Vec<HostConfig>,
-    pub policies: Vec<PolicyConfig>,
+    pub policies: Vec<Policy>,
 }
 
 impl Config {
-    pub fn load(toml_str: &str) -> Result<Self> {
+    pub fn load(toml_str: &str) -> anyhow::Result<Self> {
         let config: Config = toml::from_str(toml_str).context("Failed to parse config file.")?;
 
         if config.hosts.is_empty() {
@@ -35,44 +34,12 @@ impl Config {
             if policy.name.is_empty() {
                 bail!("Policy has an empty name.");
             }
-            Cron::from_str(&policy.cron).with_context(|| {
-                format!("Invalid cron expression for policy '{}'", policy.name)
-            })?;
+            Cron::from_str(&policy.cron)
+                .with_context(|| format!("Invalid cron expression for policy '{}'", policy.name))?;
         }
 
         Ok(config)
     }
-}
-
-#[derive(Deserialize, Clone)]
-pub struct HostConfig {
-    pub name: String,
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    pub password: String,
-}
-
-impl fmt::Debug for HostConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HostConfig")
-            .field("name", &self.name)
-            .field("host", &self.host)
-            .field("port", &self.port)
-            .field("username", &self.username)
-            .field("password", &"<redacted>")
-            .finish()
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct PolicyConfig {
-    pub name: String,
-    pub cron: String,
-    #[serde(default)]
-    pub filter: Filter,
-    #[serde(default)]
-    pub conditions: Condition,
 }
 
 #[cfg(test)]
@@ -252,21 +219,5 @@ cron = "0 */6 * * *"
         let result = Config::load(toml);
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn when_host_config_debug_then_password_should_be_redacted() {
-        let host = HostConfig {
-            name: "test".to_owned(),
-            host: "127.0.0.1".to_owned(),
-            port: 58846,
-            username: "user".to_owned(),
-            password: "secret".to_owned(),
-        };
-
-        let debug_output = format!("{host:?}");
-
-        assert!(!debug_output.contains("secret"));
-        assert!(debug_output.contains("<redacted>"));
     }
 }
