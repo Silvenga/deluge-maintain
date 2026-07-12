@@ -28,6 +28,10 @@ pub struct CliConfig {
     /// Delay between torrent deletions, in seconds.
     #[arg(long, env = "DELUGE_MAINTAIN_DELETE_DELAY", default_value_t = 1)]
     pub delete_delay: u64,
+
+    // Timeout for applying a policy, per host, in seconds.
+    #[arg(long, env = "DELUGE_MAINTAIN_POLICY_TIMEOUT", default_value_t = 300)]
+    pub policy_timeout: u64,
 }
 
 pub struct Cli;
@@ -40,7 +44,9 @@ impl Cli {
             cli.dry_run,
             Duration::from_secs(cli.delete_delay),
         );
-        Scheduler::new(config, engine).start().await?;
+        Scheduler::new(config, engine, Duration::from_secs(cli.policy_timeout))
+            .start()
+            .await?;
         Ok(())
     }
 }

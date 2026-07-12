@@ -5,7 +5,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 #[async_trait]
 pub trait Engine: Send + Sync {
@@ -84,12 +84,15 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
                     );
 
                     if !self.dry_run {
-                        if let Err(e) = service.remove_torrent(&torrent.info_hash, true).await {
-                            error!(
-                                "Failed to delete torrent '{}' (hash: {}) for policy '{}': {:#}",
-                                torrent.name, torrent.info_hash, policy.name, e
-                            );
-                        }
+                        service
+                            .remove_torrent(&torrent.info_hash, true)
+                            .await
+                            .with_context(|| {
+                                format!(
+                                    "Failed to delete torrent '{}' (hash: {}) for policy '{}'.",
+                                    torrent.name, torrent.info_hash, policy.name
+                                )
+                            })?;
                         if i + 1 < to_delete.len() {
                             sleep(self.delete_delay).await;
                         }
@@ -161,6 +164,7 @@ mod tests {
         torrents: Vec<TorrentEntry>,
         free_space: i64,
         removed: Arc<Mutex<Vec<String>>>,
+        fail_on_hash: Option<String>,
     }
 
     #[async_trait]
@@ -174,6 +178,9 @@ mod tests {
         }
 
         async fn remove_torrent(&self, hash: &str, _remove_data: bool) -> anyhow::Result<()> {
+            if self.fail_on_hash.as_deref() == Some(hash) {
+                anyhow::bail!("Mock failure for hash {hash}");
+            }
             self.removed.lock().unwrap().push(hash.to_owned());
             Ok(())
         }
@@ -184,6 +191,7 @@ mod tests {
         torrents: Vec<TorrentEntry>,
         free_space: i64,
         removed: Arc<Mutex<Vec<String>>>,
+        fail_on_hash: Option<String>,
     }
 
     impl DelugeServiceFactory for MockFactory {
@@ -198,6 +206,7 @@ mod tests {
                 torrents: self.torrents.clone(),
                 free_space: self.free_space,
                 removed: self.removed.clone(),
+                fail_on_hash: self.fail_on_hash.clone(),
             }
         }
     }
@@ -232,6 +241,7 @@ mod tests {
             torrents,
             free_space: 1_000_000_000,
             removed: removed.clone(),
+            fail_on_hash: None,
         };
         (factory, removed)
     }
@@ -246,5 +256,46 @@ mod tests {
                 ..Default::default()
             },
         }
+    }
+
+    #[tokio::test]
+    async fn when_remove_torrent_fails_then_run_policy_should_return_err_and_stop_deleting() {
+        let torrents = vec![
+            make_torrent("highest_dc", 5.0),
+            make_torrent("mid_dc", 3.0),
+            make_torrent("lowest_dc", 1.0),
+        ];
+        let removed = Arc::new(Mutex::new(Vec::new()));
+        let factory = MockFactory {
+            torrents,
+            free_space: 1_000_000_000,
+            removed: removed.clone(),
+            fail_on_hash: Some("highest_dc".to_owned()),
+        };
+        let engine = DelugeClientEngine::new(factory, false, Duration::ZERO);
+
+        let policy = Policy {
+            name: "test-policy".to_owned(),
+            cron: "*/1 * * * *".to_owned(),
+            filter: Filter::default(),
+            conditions: Condition {
+                total_count: Some(2),
+                ..Default::default()
+            },
+        };
+
+        let result = engine.run_policy(&policy, &make_host()).await;
+
+        assert!(
+            result.is_err(),
+            "Should return Err on first deletion failure"
+        );
+
+        let removed = removed.lock().unwrap().clone();
+        assert_eq!(
+            removed.len(),
+            0,
+            "No torrent should be successfully deleted, and second deletion should not be attempted"
+        );
     }
 }

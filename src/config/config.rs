@@ -136,6 +136,7 @@ cron = "0 */6 * * *"
 
 [policies.conditions]
 available_space = "50 GiB"
+used_space = "800 GiB"
 total_count = 500
 "#;
 
@@ -144,6 +145,10 @@ total_count = 500
         assert_eq!(
             config.policies[0].conditions.available_space,
             Some(bytesize::ByteSize::gib(50))
+        );
+        assert_eq!(
+            config.policies[0].conditions.used_space,
+            Some(bytesize::ByteSize::gib(800))
         );
         assert_eq!(config.policies[0].conditions.total_count, Some(500));
     }

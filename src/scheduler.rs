@@ -8,18 +8,18 @@ use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{info, warn};
 
-const TIMEOUT: Duration = Duration::from_secs(300);
-
 pub struct Scheduler<E: Engine> {
     config: Config,
     engine: Arc<E>,
+    policy_timeout: Duration,
 }
 
 impl<E: Engine + 'static> Scheduler<E> {
-    pub fn new(config: Config, engine: E) -> Self {
+    pub fn new(config: Config, engine: E, policy_timeout: Duration) -> Self {
         Self {
             config,
             engine: Arc::from(engine),
+            policy_timeout,
         }
     }
 
@@ -31,12 +31,13 @@ impl<E: Engine + 'static> Scheduler<E> {
                 let policy = policy.clone();
                 let hosts = self.config.hosts.clone();
                 let engine = self.engine.clone();
+                let timeout = self.policy_timeout;
                 move |_uuid, _l| {
                     let policy = policy.clone();
                     let hosts = hosts.clone();
                     let engine = engine.clone();
                     Box::pin(async move {
-                        run_policy_across_hosts(&policy, &hosts, engine.clone()).await;
+                        run_policy_across_hosts(&policy, &hosts, engine.clone(), timeout).await;
                     })
                 }
             })
@@ -60,11 +61,16 @@ impl<E: Engine + 'static> Scheduler<E> {
     }
 }
 
-async fn run_policy_across_hosts<E: Engine>(policy: &Policy, hosts: &[HostConfig], engine: Arc<E>) {
+async fn run_policy_across_hosts<E: Engine>(
+    policy: &Policy,
+    hosts: &[HostConfig],
+    engine: Arc<E>,
+    policy_timeout: Duration,
+) {
     for host in hosts {
         info!("Running policy '{}' for host '{}'.", policy.name, host.name);
 
-        let result = timeout(TIMEOUT, engine.run_policy(policy, host)).await;
+        let result = timeout(policy_timeout, engine.run_policy(policy, host)).await;
         match result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
@@ -75,9 +81,11 @@ async fn run_policy_across_hosts<E: Engine>(policy: &Policy, hosts: &[HostConfig
             }
             Err(_) => {
                 warn!(
-                    "Policy '{}' timed out for host '{}' after 300 seconds. \
+                    "Policy '{}' timed out for host '{}' after {} seconds. \
                      Check if the Deluge instance is responsive.",
-                    policy.name, host.name
+                    policy.name,
+                    host.name,
+                    policy_timeout.as_secs()
                 );
             }
         }
@@ -109,7 +117,7 @@ mod tests {
         let policy = make_policy();
         let hosts = vec![make_host("host-a"), make_host("host-b")];
 
-        run_policy_across_hosts(&policy, &hosts, Arc::new(engine)).await;
+        run_policy_across_hosts(&policy, &hosts, Arc::new(engine), Duration::from_secs(300)).await;
     }
 
     #[tokio::test]
@@ -138,7 +146,7 @@ mod tests {
             make_host("host-c"),
         ];
 
-        run_policy_across_hosts(&policy, &hosts, Arc::new(engine)).await;
+        run_policy_across_hosts(&policy, &hosts, Arc::new(engine), Duration::from_secs(300)).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -166,7 +174,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let scheduler = Scheduler::new(config, engine);
+        let scheduler = Scheduler::new(config, engine, Duration::from_secs(300));
 
         let handle = tokio::spawn(async move {
             let _ = scheduler.start().await;

@@ -182,15 +182,16 @@ mod tests {
     }
 
     #[test]
-    fn when_total_count_condition_then_should_delete_until_below_threshold() {
+    fn when_used_space_condition_then_should_delete_until_below_threshold() {
         let policy = make_policy(Condition {
-            total_count: Some(3),
+            used_space: Some(bytesize::ByteSize::gib(10)),
             ..Default::default()
         });
+        let gib = 1_073_741_824i64;
         let torrents = vec![
-            make_torrent(900_000, 5.0, 1024, "highest_dc"),
-            make_torrent(850_000, 3.0, 1024, "mid_dc"),
-            make_torrent(800_000, 1.0, 1024, "lowest_dc"),
+            make_torrent(900_000, 5.0, gib * 5, "highest_dc"),
+            make_torrent(850_000, 3.0, gib * 5, "mid_dc"),
+            make_torrent(800_000, 1.0, gib * 5, "lowest_dc"),
         ];
         let now = now();
 
@@ -198,10 +199,15 @@ mod tests {
 
         match result {
             DeletionPlan::Deletions(deletions) => {
-                assert_eq!(deletions.len(), 1);
+                assert_eq!(
+                    deletions.len(),
+                    2,
+                    "Should delete 2 torrents to bring used_space below 10 GiB"
+                );
                 assert_eq!(deletions[0].info_hash, "highest_dc");
+                assert_eq!(deletions[1].info_hash, "mid_dc");
             }
-            other => panic!("expected Deletions with 1 item, got {other:?}"),
+            other => panic!("expected Deletions with 2 items, got {other:?}"),
         }
     }
 
