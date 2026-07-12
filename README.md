@@ -13,7 +13,32 @@ docker run \
   ghcr.io/silvenga/deluge-maintain:latest
 ```
 
-## Configuration
+The `deluge-maintain` service exposes knobs that can be configured via environment variables or command line options.
+
+```
+A service that puts deluge on autopilot using retention policies
+
+Usage: deluge-maintain [OPTIONS] --config <CONFIG>
+
+Options:
+      --config <CONFIG>
+          Path to the TOML configuration file [env: DELUGE_MAINTAIN_CONFIG=]
+      --dry-run
+          Simulate policy enforcement without making changes [env: DELUGE_MAINTAIN_DRY_RUN=]
+      --delete-delay <DELETE_DELAY>
+          Delay between torrent deletions, in seconds [env: DELUGE_MAINTAIN_DELETE_DELAY=] [default: 1]
+      --policy-timeout <POLICY_TIMEOUT>
+          [env: DELUGE_MAINTAIN_POLICY_TIMEOUT=] [default: 300]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
+
+By default `DELUGE_MAINTAIN_CONFIG` is `/config/deluge-maintain.toml` when running as a container. Set
+`DELUGE_MAINTAIN_DRY_RUN=true` to test your policy without actually deleting torrents.
+
+## Config File
 
 One or more retention policies drive are executed against each host in order. Checking if any torrents needed to be
 deleted to match the configured policy.
