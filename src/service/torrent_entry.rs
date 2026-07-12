@@ -35,7 +35,7 @@ impl fmt::Display for TorrentEntry {
 
         write!(
             f,
-            "{} (hash={}, added={}, ratio=",
+            "'{}' (hash={}, added={}, ratio=",
             self.name, self.info_hash, added_str,
         )?;
 
@@ -66,7 +66,7 @@ impl From<RpcTorrentEntry> for TorrentEntry {
             is_finished: entry.status.is_finished,
             total_seeds: entry.status.total_seeds,
             total_peers: entry.status.total_peers,
-            availability: entry.status.distributed_copies,
+            availability: entry.status.distributed_copies.min(1.0),
             total_wanted: entry.status.total_wanted,
         }
     }
@@ -105,6 +105,36 @@ mod tests {
         assert_eq!(entry.total_seeds, 50);
         assert_eq!(entry.total_peers, 20);
         assert!((entry.availability - 0.5).abs() < f64::EPSILON);
+        assert_eq!(entry.total_wanted, 1_073_741_824);
+    }
+
+    #[test]
+    fn when_converting_rpc_entry_then_availablity_should_truncate_to_1_0() {
+        let rpc_entry = RpcTorrentEntry {
+            info_hash: "abc123hash".to_owned(),
+            status: TorrentStatus {
+                name: "test-torrent".to_owned(),
+                time_added: 1_699_000_000,
+                ratio: Some(2.5),
+                is_finished: true,
+                total_seeds: 50,
+                total_peers: 20,
+                distributed_copies: 1.13,
+                total_wanted: 1_073_741_824,
+                ..Default::default()
+            },
+        };
+
+        let entry = TorrentEntry::from(rpc_entry);
+
+        assert_eq!(entry.info_hash, "abc123hash");
+        assert_eq!(entry.name, "test-torrent");
+        assert_eq!(entry.time_added, 1_699_000_000);
+        assert_eq!(entry.ratio, Some(2.5));
+        assert!(entry.is_finished);
+        assert_eq!(entry.total_seeds, 50);
+        assert_eq!(entry.total_peers, 20);
+        assert!((entry.availability - 1.0).abs() < f64::EPSILON);
         assert_eq!(entry.total_wanted, 1_073_741_824);
     }
 

@@ -42,9 +42,9 @@ impl Filter {
         if let Some(min_age) = self.age {
             if torrent.time_added < 0 {
                 warn!(
-                    "Torrent {} has invalid negative time_added ({}); \
+                    "Torrent '{}' has invalid negative time_added ({}); \
                      it will not match the age filter.",
-                    torrent.info_hash, torrent.time_added
+                    torrent.name, torrent.time_added
                 );
                 return false;
             }
@@ -69,9 +69,9 @@ impl Filter {
         if let Some(min_seeds) = self.min_total_seeds {
             if torrent.total_seeds < 0 {
                 warn!(
-                    "Torrent {} has invalid negative total_seeds ({}); \
+                    "Torrent '{}' has invalid negative total_seeds ({}); \
                      it will not match the seed filter.",
-                    torrent.info_hash, torrent.total_seeds
+                    torrent.name, torrent.total_seeds
                 );
                 return false;
             }

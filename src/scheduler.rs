@@ -82,9 +82,7 @@ async fn run_policy_across_hosts<E: Engine>(
             Ok(Ok(())) => {
                 info!(
                     "Policy '{}' completed for host '{}' in {:?}.",
-                    policy.name,
-                    host.name,
-                    elapsed
+                    policy.name, host.name, elapsed
                 );
             }
             Ok(Err(e)) => {
@@ -97,9 +95,7 @@ async fn run_policy_across_hosts<E: Engine>(
                 warn!(
                     "Policy '{}' timed out for host '{}' after {:?}. \
                      Check if the Deluge instance is responsive.",
-                    policy.name,
-                    host.name,
-                    elapsed
+                    policy.name, host.name, elapsed
                 );
             }
         }

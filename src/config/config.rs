@@ -1,5 +1,5 @@
 use crate::config::{HostConfig, Policy};
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use croner::Cron;
 use serde::Deserialize;
 use std::str::FromStr;

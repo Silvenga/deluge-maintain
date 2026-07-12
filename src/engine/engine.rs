@@ -1,5 +1,5 @@
 use crate::config::{HostConfig, Policy};
-use crate::engine::plan_deletions::{plan_deletions, DeletionPlan};
+use crate::engine::plan_deletions::{DeletionPlan, plan_deletions};
 use crate::service::{DelugeService, DelugeServiceFactory};
 use anyhow::Context;
 use async_trait::async_trait;
@@ -79,7 +79,7 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
 
         for (i, torrent) in to_delete.iter().enumerate() {
             info!(
-                "Deleting{} torrent [{}].",
+                "Deleting{} torrent {}.",
                 if self.dry_run { " (dry run)" } else { "" },
                 torrent,
             );

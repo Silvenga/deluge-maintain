@@ -67,18 +67,6 @@ The simulation step still runs to verify the plan is feasible.
 If a host is unreachable or an RPC call fails, skip that host, log a warning, and continue with other hosts. A single
 host failure does not abort the run.
 
-## Testing
-
-- **Unit tests**: filter matching, condition checking, sort order, deletion planning
-  (simulation). All use plain `TorrentStatus` structs - no RPC.
-- **Integration tests** (`tests/`): end-to-end engine pipeline with fixture data, verifying the full plan -> simulate ->
-  verify cycle.
-- **Not tested**: RPC client itself (deluge-rpc-client's responsibility), cron scheduling (tokio-cron-scheduler's
-  responsibility), tracing output.
-
-The engine's core logic (`plan_deletions`) is a pure method on the `Engine` struct that takes data in and returns a
-deletion plan. The RPC calls are in a separate method. This is the testable boundary.
-
 ## Style Constraints
 
 - Spread code across files, keep files small. Keep `impl` blocks with their struct definitions.
