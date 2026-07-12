@@ -1,5 +1,5 @@
 use crate::config::{HostConfig, Policy};
-use crate::engine::plan_deletions::{DeletionPlan, plan_deletions};
+use crate::engine::plan_deletions::{plan_deletions, DeletionPlan};
 use crate::service::{DelugeService, DelugeServiceFactory};
 use anyhow::Context;
 use async_trait::async_trait;
@@ -47,56 +47,58 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
             policy.name
         ))?;
 
-        let plan = plan_deletions(policy, &torrents, free_space, now);
-
-        match plan {
+        let to_delete = match plan_deletions(policy, &torrents, free_space, now) {
             DeletionPlan::NothingToDo => {
-                info!(
-                    "No conditions met for policy '{}', nothing to do.",
-                    policy.name
-                );
-            }
-            DeletionPlan::Impossible => {
-                warn!(
-                    "Conditions cannot be satisfied for policy '{}'. \
-                     Consider adjusting condition thresholds or filter criteria.",
-                    policy.name
-                );
+                info!("Policy '{}' is satisfied, nothing to do.", policy.name);
+                return Ok(());
             }
             DeletionPlan::Deletions(to_delete) => {
                 info!(
-                    "Planned {} deletion(s) for policy '{}' (dry_run: {}).",
-                    to_delete.len(),
+                    "Policy '{}' is not satisfied. Will delete {} torrents.",
                     policy.name,
-                    self.dry_run
+                    to_delete.len(),
                 );
-
-                for (i, torrent) in to_delete.iter().enumerate() {
-                    info!(
-                        "Deleting torrent '{}' (hash: {}, distributed_copies: {}, \
-                         total_wanted: {}) for policy '{}' (dry_run: {}).",
-                        torrent.name,
-                        torrent.info_hash,
-                        torrent.distributed_copies,
-                        torrent.total_wanted,
+                to_delete
+            }
+            DeletionPlan::Impossible(to_delete) => {
+                if to_delete.is_empty() {
+                    warn!(
+                        "Policy '{}' is impossible to satisfy. No torrents are eligible for deletion.",
                         policy.name,
-                        self.dry_run
                     );
+                } else {
+                    warn!(
+                        "Policy '{}' is impossible to satisfy. Can only delete {} torrents which is insufficient.",
+                        policy.name,
+                        to_delete.len(),
+                    );
+                }
+                to_delete
+            }
+        };
 
-                    if !self.dry_run {
-                        service
-                            .remove_torrent(&torrent.info_hash, true)
-                            .await
-                            .with_context(|| {
-                                format!(
-                                    "Failed to delete torrent '{}' (hash: {}) for policy '{}'.",
-                                    torrent.name, torrent.info_hash, policy.name
-                                )
-                            })?;
-                        if i + 1 < to_delete.len() {
-                            sleep(self.delete_delay).await;
-                        }
-                    }
+        for (i, torrent) in to_delete.iter().enumerate() {
+            info!(
+                "Deleting torrent '{}' (hash: {}, swarm_copies: {}, size: {}, dry_run: {}).",
+                torrent.name,
+                torrent.info_hash,
+                torrent.distributed_copies,
+                torrent.total_wanted,
+                self.dry_run
+            );
+
+            if !self.dry_run {
+                service
+                    .remove_torrent(&torrent.info_hash, true)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to delete torrent '{}' (hash: {}). Continuing...",
+                            torrent.name, torrent.info_hash,
+                        )
+                    })?;
+                if i + 1 < to_delete.len() {
+                    sleep(self.delete_delay).await;
                 }
             }
         }

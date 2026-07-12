@@ -1,14 +1,15 @@
 use crate::config::{ConditionContext, Policy};
 use crate::engine::deletion_priority::sort_by_deletion_priority;
 use crate::service::TorrentEntry;
+use bytesize::ByteSize;
 use std::time::SystemTime;
-use tracing::warn;
+use tracing::info;
 
 #[derive(Debug)]
 pub enum DeletionPlan {
     NothingToDo,
     Deletions(Vec<TorrentEntry>),
-    Impossible,
+    Impossible(Vec<TorrentEntry>),
 }
 
 pub fn plan_deletions(
@@ -26,6 +27,17 @@ pub fn plan_deletions(
         torrent_count,
     };
 
+    info!(
+        "Discovered {} torrents (free_space: {}, used_space: {}).",
+        torrents.len(),
+        ByteSize::b(free_space as u64),
+        ByteSize::b(used_space as u64),
+    );
+
+    for torrent in torrents.iter() {
+        info!("Torrent: {:?}", torrent);
+    }
+
     if !policy.conditions.is_met(&ctx) {
         return DeletionPlan::NothingToDo;
     }
@@ -36,14 +48,10 @@ pub fn plan_deletions(
         .cloned()
         .collect();
 
-    if filtered.is_empty() {
-        warn!(
-            "Conditions are met for policy '{}' but no torrents pass the filter. \
-                 Consider relaxing filter criteria.",
-            policy.name
-        );
-        return DeletionPlan::Impossible;
-    }
+    info!(
+        "After filtering, {} torrents are eligible for removal.",
+        filtered.len(),
+    );
 
     sort_by_deletion_priority(&mut filtered, now);
 
@@ -52,7 +60,7 @@ pub fn plan_deletions(
     let mut simulated_used_space = used_space;
     let mut simulated_count = torrent_count;
 
-    for torrent in &filtered {
+    for torrent in filtered.into_iter() {
         let ctx = ConditionContext {
             free_space: simulated_free_space,
             used_space: simulated_used_space,
@@ -67,31 +75,21 @@ pub fn plan_deletions(
         simulated_used_space -= torrent.total_wanted;
         simulated_count -= 1;
 
-        to_delete.push(torrent.clone());
+        to_delete.push(torrent);
     }
 
-    if to_delete.is_empty() {
-        warn!(
-            "Conditions are met for policy '{}' but no torrents were selected for deletion. \
-                 Consider relaxing filter criteria.",
-            policy.name
-        );
-        return DeletionPlan::Impossible;
-    }
+    info!(
+        "Simulated deletion plan: {} torrents will be deleted, freeing {}.",
+        to_delete.len(),
+        ByteSize::b((simulated_free_space - free_space) as u64),
+    );
 
-    let final_ctx = ConditionContext {
+    if policy.conditions.is_met(&ConditionContext {
         free_space: simulated_free_space,
         used_space: simulated_used_space,
         torrent_count: simulated_count,
-    };
-
-    if policy.conditions.is_met(&final_ctx) {
-        warn!(
-            "Conditions cannot be satisfied for policy '{}' even after deleting all filtered \
-                 torrents. Consider adjusting condition thresholds or filter criteria.",
-            policy.name
-        );
-        return DeletionPlan::Impossible;
+    }) {
+        return DeletionPlan::Impossible(to_delete);
     }
 
     DeletionPlan::Deletions(to_delete)
@@ -160,7 +158,7 @@ mod tests {
 
         let result = plan_deletions(&policy, &torrents, 1_000_000_000, now);
 
-        assert!(matches!(result, DeletionPlan::Impossible));
+        assert!(matches!(result, DeletionPlan::Impossible(_)));
     }
 
     #[test]
@@ -178,7 +176,7 @@ mod tests {
 
         let result = plan_deletions(&policy, &torrents, free_space, now);
 
-        assert!(matches!(result, DeletionPlan::Impossible));
+        assert!(matches!(result, DeletionPlan::Impossible(_)));
     }
 
     #[test]

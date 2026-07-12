@@ -27,7 +27,11 @@ impl<E: Engine + 'static> Scheduler<E> {
         let mut sched = JobScheduler::new().await?;
 
         for policy in &self.config.policies {
-            let job = Job::new_async(policy.cron(), {
+            let cron = policy.cron();
+
+            info!("Scheduling policy '{}' for '{}'...", policy.name, cron);
+
+            let job = Job::new_async(cron, {
                 let policy = policy.clone();
                 let hosts = self.config.hosts.clone();
                 let engine = self.engine.clone();

@@ -7,7 +7,7 @@ use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use tracing::debug;
+use tracing::info;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -58,6 +58,6 @@ async fn build_config() -> Result<(CliConfig, Config)> {
         .with_context(|| format!("Failed to read config file {}.", cli.config.display()))?;
     let config = Config::load(&config_contents)?;
 
-    debug!("Loaded configuration: {:#?}.", config);
+    info!("Loaded configuration: {:#?}.", config);
     Ok((cli, config))
 }
