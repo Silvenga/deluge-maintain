@@ -1,4 +1,4 @@
-use crate::service::torrent_entry::{TorrentEntry, TORRENT_FIELDS};
+use crate::service::torrent_entry::{TORRENT_FIELDS, TorrentEntry};
 use anyhow::Context;
 use async_trait::async_trait;
 use deluge_rpc_client::models::FilterDict;

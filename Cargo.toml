@@ -61,3 +61,6 @@ toml = "1.1.2"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 async-trait = "0.1.89"
+
+[dev-dependencies]
+mockall = "0.13"

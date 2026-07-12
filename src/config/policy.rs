@@ -1,5 +1,5 @@
-use serde::Deserialize;
 use crate::config::{Condition, Filter};
+use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Policy {

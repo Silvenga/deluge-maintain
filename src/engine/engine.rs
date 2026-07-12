@@ -1,6 +1,7 @@
 use crate::config::{HostConfig, Policy};
-use crate::engine::plan_deletions::{plan_deletions, DeletionPlan};
+use crate::engine::plan_deletions::{DeletionPlan, plan_deletions};
 use crate::service::{DelugeService, DelugeServiceFactory};
+use anyhow::Context;
 use async_trait::async_trait;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
@@ -36,27 +37,15 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
             self.service_factory
                 .create(&host.host, host.port, &host.username, &host.password);
 
-        let torrents = match service.get_torrents().await {
-            Ok(t) => t,
-            Err(e) => {
-                warn!(
-                    "Failed to fetch torrents for policy '{}': {:#}. Skipping.",
-                    policy.name, e
-                );
-                return Ok(());
-            }
-        };
+        let torrents = service.get_torrents().await.context(format!(
+            "Failed to fetch torrents for policy '{}'.",
+            policy.name
+        ))?;
 
-        let free_space = match service.get_free_space().await {
-            Ok(s) => s,
-            Err(e) => {
-                warn!(
-                    "Failed to fetch free space for policy '{}': {:#}. Skipping.",
-                    policy.name, e
-                );
-                return Ok(());
-            }
-        };
+        let free_space = service.get_free_space().await.context(format!(
+            "Failed to fetch free space for policy '{}'.",
+            policy.name
+        ))?;
 
         let plan = plan_deletions(policy, &torrents, free_space, now);
 

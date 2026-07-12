@@ -88,98 +88,62 @@ async fn run_policy_across_hosts<E: Engine>(policy: &Policy, hosts: &[HostConfig
 mod tests {
     use super::*;
     use crate::config::{Config, HostConfig, Policy};
-    use async_trait::async_trait;
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::{Arc, Mutex};
+    use mockall::mock;
+    use std::sync::Arc;
     use tokio::time::sleep;
+
+    #[tokio::test]
+    async fn when_engine_returns_err_then_next_host_should_still_be_processed() {
+        let mut engine = MockEngine::new();
+        engine
+            .expect_run_policy()
+            .withf(|_, host| host.name == "host-a")
+            .times(1)
+            .returning(|_, _| Err(anyhow::anyhow!("host unreachable")));
+        engine
+            .expect_run_policy()
+            .withf(|_, host| host.name == "host-b")
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let policy = make_policy();
+        let hosts = vec![make_host("host-a"), make_host("host-b")];
+
+        run_policy_across_hosts(&policy, &hosts, Arc::new(engine)).await;
+    }
+
+    #[tokio::test]
+    async fn when_multiple_hosts_then_all_should_be_processed() {
+        let mut engine = MockEngine::new();
+        engine
+            .expect_run_policy()
+            .withf(|_, host| host.name == "host-a")
+            .times(1)
+            .returning(|_, _| Ok(()));
+        engine
+            .expect_run_policy()
+            .withf(|_, host| host.name == "host-b")
+            .times(1)
+            .returning(|_, _| Ok(()));
+        engine
+            .expect_run_policy()
+            .withf(|_, host| host.name == "host-c")
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let policy = make_policy();
+        let hosts = vec![
+            make_host("host-a"),
+            make_host("host-b"),
+            make_host("host-c"),
+        ];
+
+        run_policy_across_hosts(&policy, &hosts, Arc::new(engine)).await;
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn when_scheduler_started_then_engine_should_be_invoked_for_configured_host_and_policy() {
-        let config = test_config();
-        let engine = MockEngine::new();
-
-        let scheduler = Scheduler::new(config, engine.clone());
-
-        let handle = tokio::spawn(async move {
-            let _ = scheduler.start().await;
-        });
-
-        sleep(Duration::from_millis(1200)).await;
-
-        handle.abort();
-
-        let calls = engine.call_count();
-
-        assert!(
-            calls >= 1,
-            "Expected engine to be invoked at least once, got {calls} calls"
-        );
-
-        assert_eq!(
-            engine.last_policy().as_deref(),
-            Some("test-policy"),
-            "Engine should receive the configured policy name"
-        );
-        assert_eq!(
-            engine.last_host().as_deref(),
-            Some("test-host"),
-            "Engine should receive the configured host name"
-        );
-    }
-
-    struct MockState {
-        call_count: AtomicU32,
-        last_policy: Mutex<Option<String>>,
-        last_host: Mutex<Option<String>>,
-    }
-
-    impl MockState {
-        fn new() -> Self {
-            Self {
-                call_count: AtomicU32::new(0),
-                last_policy: Mutex::new(None),
-                last_host: Mutex::new(None),
-            }
-        }
-    }
-
-    #[derive(Clone)]
-    struct MockEngine {
-        state: Arc<MockState>,
-    }
-
-    impl MockEngine {
-        fn new() -> Self {
-            Self {
-                state: Arc::new(MockState::new()),
-            }
-        }
-
-        fn call_count(&self) -> u32 {
-            self.state.call_count.load(Ordering::SeqCst)
-        }
-
-        fn last_policy(&self) -> Option<String> {
-            self.state.last_policy.lock().unwrap().clone()
-        }
-
-        fn last_host(&self) -> Option<String> {
-            self.state.last_host.lock().unwrap().clone()
-        }
-    }
-
-    #[async_trait]
-    impl Engine for MockEngine {
-        async fn run_policy(&self, policy: &Policy, host: &HostConfig) -> Result<()> {
-            self.state.call_count.fetch_add(1, Ordering::SeqCst);
-            *self.state.last_policy.lock().unwrap() = Some(policy.name.clone());
-            *self.state.last_host.lock().unwrap() = Some(host.name.clone());
-            Ok(())
-        }
-    }
-
-    fn test_config() -> Config {
-        Config {
+        let config = Config {
             hosts: vec![HostConfig {
                 name: "test-host".to_owned(),
                 host: "127.0.0.1".to_owned(),
@@ -193,6 +157,51 @@ mod tests {
                 filter: Default::default(),
                 conditions: Default::default(),
             }],
+        };
+
+        let mut engine = MockEngine::new();
+        engine
+            .expect_run_policy()
+            .withf(|policy, host| policy.name == "test-policy" && host.name == "test-host")
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let scheduler = Scheduler::new(config, engine);
+
+        let handle = tokio::spawn(async move {
+            let _ = scheduler.start().await;
+        });
+
+        sleep(Duration::from_millis(1200)).await;
+
+        handle.abort();
+    }
+
+    mock! {
+        pub Engine {}
+
+        #[async_trait::async_trait]
+        impl Engine for Engine {
+            async fn run_policy(&self, policy: &Policy, host: &HostConfig) -> anyhow::Result<()>;
+        }
+    }
+
+    fn make_host(name: &str) -> HostConfig {
+        HostConfig {
+            name: name.to_owned(),
+            host: "127.0.0.1".to_owned(),
+            port: 58846,
+            username: "user".to_owned(),
+            password: "pass".to_owned(),
+        }
+    }
+
+    fn make_policy() -> Policy {
+        Policy {
+            name: "test-policy".to_owned(),
+            cron: "*/1 * * * * *".to_owned(),
+            filter: Default::default(),
+            conditions: Default::default(),
         }
     }
 }
