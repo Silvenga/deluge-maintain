@@ -1,6 +1,5 @@
 use crate::config::{Config, HostConfig, Policy};
 use crate::engine::Engine;
-use crate::service::DelugeClientService;
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,18 +8,16 @@ use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tracing::{info, warn};
 
-pub struct Scheduler {
+pub struct Scheduler<E: Engine> {
     config: Config,
-    dry_run: bool,
-    delete_delay: Duration,
+    engine: Arc<E>,
 }
 
-impl Scheduler {
-    pub fn new(config: Config, dry_run: bool, delete_delay: Duration) -> Self {
+impl<E: Engine + 'static> Scheduler<E> {
+    pub fn new(config: Config, engine: E) -> Self {
         Self {
             config,
-            dry_run,
-            delete_delay,
+            engine: Arc::from(engine),
         }
     }
 
@@ -29,16 +26,15 @@ impl Scheduler {
 
         for policy in &self.config.policies {
             let job = Job::new_async(&policy.cron, {
-                let dry_run = self.dry_run;
-                let delete_delay = self.delete_delay;
-                let hosts = self.config.hosts.clone();
                 let policy = policy.clone();
+                let hosts = self.config.hosts.clone();
+                let engine = self.engine.clone();
                 move |_uuid, _l| {
                     let policy = policy.clone();
                     let hosts = hosts.clone();
-
+                    let engine = engine.clone();
                     Box::pin(async move {
-                        run_policy_across_hosts(&policy, &hosts, dry_run, delete_delay).await;
+                        run_policy_across_hosts(&policy, &hosts, engine.clone()).await;
                     })
                 }
             })
@@ -62,25 +58,11 @@ impl Scheduler {
     }
 }
 
-async fn run_policy_across_hosts(
-    policy: &Policy,
-    hosts: &[HostConfig],
-    dry_run: bool,
-    delete_delay: Duration,
-) {
+async fn run_policy_across_hosts<E: Engine>(policy: &Policy, hosts: &[HostConfig], engine: Arc<E>) {
     for host in hosts {
         info!("Running policy '{}' for host '{}'.", policy.name, host.name);
 
-        let service = Arc::new(DelugeClientService::new(
-            &host.host,
-            host.port,
-            &host.username,
-            &host.password,
-        ));
-        let engine = Engine::new(service, dry_run, delete_delay);
-
-        let result = timeout(Duration::from_secs(300), engine.run_policy(policy)).await;
-
+        let result = timeout(Duration::from_secs(300), engine.run_policy(policy, host)).await;
         match result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {

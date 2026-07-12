@@ -66,26 +66,6 @@ The simulation step still runs to verify the plan is feasible.
 If a host is unreachable or an RPC call fails, skip that host, log a warning, and continue with other hosts. A single
 host failure does not abort the run.
 
-## Service Layer
-
-RPC calls are abstracted behind a `DelugeService` trait using generics (not trait objects - no `#[async_trait]`, native
-async traits with concrete generic types):
-
-```rust
-trait DelugeService {
-    async fn get_torrents(&self) -> anyhow::Result<Vec<TorrentEntry>>;
-    async fn get_free_space(&self) -> anyhow::Result<i64>;
-    async fn remove_torrent(&self, hash: &str, remove_data: bool) -> anyhow::Result<()>;
-}
-```
-
-Production wraps `DelugeClient`. Tests use a mock impl with fixture data.
-
-Torrent field selection is minimized - only request the fields the engine uses: `name`, `hash`, `time_added`, `ratio`,
-`is_finished`, `total_seeds`, `total_peers`, `distributed_copies`, `total_wanted`.
-
-Deletions always use `remove_data = true` (the goal is freeing disk space).
-
 ## Testing
 
 - **Unit tests**: filter matching, condition checking, sort order, deletion planning
