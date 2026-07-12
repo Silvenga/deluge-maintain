@@ -2,7 +2,7 @@ use crate::config::{Config, HostConfig, Policy};
 use crate::engine::Engine;
 use anyhow::{Context, Result};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::signal::ctrl_c;
 use tokio::time::timeout;
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -74,22 +74,32 @@ async fn run_policy_across_hosts<E: Engine>(
     for host in hosts {
         info!("Running policy '{}' for host '{}'.", policy.name, host.name);
 
+        let start = Instant::now();
         let result = timeout(policy_timeout, engine.run_policy(policy, host)).await;
+        let elapsed = start.elapsed();
+
         match result {
-            Ok(Ok(())) => {}
+            Ok(Ok(())) => {
+                info!(
+                    "Policy '{}' completed for host '{}' in {:?}.",
+                    policy.name,
+                    host.name,
+                    elapsed
+                );
+            }
             Ok(Err(e)) => {
                 warn!(
-                    "Policy '{}' failed for host '{}': {:#}",
-                    policy.name, host.name, e
+                    "Policy '{}' failed for host '{}' after {:?}: {:#}",
+                    policy.name, host.name, elapsed, e
                 );
             }
             Err(_) => {
                 warn!(
-                    "Policy '{}' timed out for host '{}' after {} seconds. \
+                    "Policy '{}' timed out for host '{}' after {:?}. \
                      Check if the Deluge instance is responsive.",
                     policy.name,
                     host.name,
-                    policy_timeout.as_secs()
+                    elapsed
                 );
             }
         }

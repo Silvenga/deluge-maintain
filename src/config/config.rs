@@ -1,5 +1,5 @@
 use crate::config::{HostConfig, Policy};
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use croner::Cron;
 use serde::Deserialize;
 use std::str::FromStr;
@@ -108,6 +108,7 @@ cron = "0 */6 * * *"
 age = "30d"
 ratio = 2.0
 min_total_seeds = 3
+min_availability = 0.5
 "#;
 
         let config = Config::load(toml).unwrap();
@@ -118,6 +119,30 @@ min_total_seeds = 3
         );
         assert_eq!(config.policies[0].filter.ratio, Some(2.0));
         assert_eq!(config.policies[0].filter.min_total_seeds, Some(3));
+        assert!((config.policies[0].filter.min_availability - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn when_filter_not_specified_then_min_availability_should_default_to_1() {
+        let toml = r#"
+[[hosts]]
+name = "test"
+host = "127.0.0.1"
+port = 58846
+username = "localclient"
+password = "secret"
+
+[[policies]]
+name = "default"
+cron = "0 */6 * * *"
+"#;
+
+        let config = Config::load(toml).unwrap();
+
+        assert!(
+            (config.policies[0].filter.min_availability - 1.0).abs() < f32::EPSILON,
+            "min_availability should default to 1.0 when not specified"
+        );
     }
 
     #[test]

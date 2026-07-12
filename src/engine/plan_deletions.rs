@@ -3,7 +3,7 @@ use crate::engine::deletion_priority::sort_by_deletion_priority;
 use crate::service::TorrentEntry;
 use bytesize::ByteSize;
 use std::time::SystemTime;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug)]
 pub enum DeletionPlan {
@@ -35,7 +35,7 @@ pub fn plan_deletions(
     );
 
     for torrent in torrents.iter() {
-        info!("Torrent: {:?}", torrent);
+        debug!("Torrent: {:?}", torrent);
     }
 
     if !policy.conditions.is_met(&ctx) {
@@ -107,7 +107,7 @@ mod tests {
             total_count: Some(100),
             ..Default::default()
         });
-        let torrents = vec![make_torrent(900_000, 2.0, 1024, "a")];
+        let torrents = vec![make_torrent(900_000, 0.5, 10, 1024, "a")];
         let now = now();
 
         let result = plan_deletions(&policy, &torrents, 1_000_000_000, now);
@@ -122,8 +122,8 @@ mod tests {
             ..Default::default()
         });
         let torrents = vec![
-            make_torrent(900_000, 5.0, 5_000_000_000, "high_dc"),
-            make_torrent(800_000, 1.0, 5_000_000_000, "low_dc"),
+            make_torrent(900_000, 1.0, 50, 5_000_000_000, "high_avail"),
+            make_torrent(800_000, 1.0, 10, 5_000_000_000, "low_avail"),
         ];
         let now = now();
         let free_space = 5_000_000_000;
@@ -133,7 +133,7 @@ mod tests {
         match result {
             DeletionPlan::Deletions(deletions) => {
                 assert_eq!(deletions.len(), 1);
-                assert_eq!(deletions[0].info_hash, "high_dc");
+                assert_eq!(deletions[0].info_hash, "high_avail");
             }
             other => panic!("expected Deletions, got {other:?}"),
         }
@@ -145,7 +145,7 @@ mod tests {
             name: "test".to_owned(),
             cron: "*/1 * * * *".to_owned(),
             filter: Filter {
-                min_distributed_copies: Some(100.0),
+                min_availability: 2.0,
                 ..Default::default()
             },
             conditions: Condition {
@@ -153,7 +153,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let torrents = vec![make_torrent(900_000, 2.0, 1024, "a")];
+        let torrents = vec![make_torrent(900_000, 0.5, 10, 1024, "a")];
         let now = now();
 
         let result = plan_deletions(&policy, &torrents, 1_000_000_000, now);
@@ -168,8 +168,8 @@ mod tests {
             ..Default::default()
         });
         let torrents = vec![
-            make_torrent(900_000, 5.0, 1024, "a"),
-            make_torrent(800_000, 1.0, 1024, "b"),
+            make_torrent(900_000, 1.0, 10, 1024, "a"),
+            make_torrent(800_000, 1.0, 10, 1024, "b"),
         ];
         let now = now();
         let free_space = 0;
@@ -187,9 +187,9 @@ mod tests {
         });
         let gib = 1_073_741_824i64;
         let torrents = vec![
-            make_torrent(900_000, 5.0, gib * 5, "highest_dc"),
-            make_torrent(850_000, 3.0, gib * 5, "mid_dc"),
-            make_torrent(800_000, 1.0, gib * 5, "lowest_dc"),
+            make_torrent(900_000, 1.0, 50, gib * 5, "highest_avail"),
+            make_torrent(850_000, 1.0, 30, gib * 5, "mid_avail"),
+            make_torrent(800_000, 1.0, 10, gib * 5, "lowest_avail"),
         ];
         let now = now();
 
@@ -202,8 +202,8 @@ mod tests {
                     2,
                     "Should delete 2 torrents to bring used_space below 10 GiB"
                 );
-                assert_eq!(deletions[0].info_hash, "highest_dc");
-                assert_eq!(deletions[1].info_hash, "mid_dc");
+                assert_eq!(deletions[0].info_hash, "highest_avail");
+                assert_eq!(deletions[1].info_hash, "mid_avail");
             }
             other => panic!("expected Deletions with 2 items, got {other:?}"),
         }
@@ -216,9 +216,9 @@ mod tests {
             ..Default::default()
         });
         let torrents = vec![
-            make_torrent(900_000, 5.0, 1024, "highest_dc"),
-            make_torrent(850_000, 3.0, 1024, "mid_dc"),
-            make_torrent(800_000, 1.0, 1024, "lowest_dc"),
+            make_torrent(900_000, 1.0, 50, 1024, "highest_avail"),
+            make_torrent(850_000, 1.0, 30, 1024, "mid_avail"),
+            make_torrent(800_000, 1.0, 10, 1024, "lowest_avail"),
         ];
         let now = now();
 
@@ -227,8 +227,8 @@ mod tests {
         match result {
             DeletionPlan::Deletions(deletions) => {
                 assert_eq!(deletions.len(), 2);
-                assert_eq!(deletions[0].info_hash, "highest_dc");
-                assert_eq!(deletions[1].info_hash, "mid_dc");
+                assert_eq!(deletions[0].info_hash, "highest_avail");
+                assert_eq!(deletions[1].info_hash, "mid_avail");
             }
             other => panic!("expected Deletions with 2 items, got {other:?}"),
         }
@@ -238,16 +238,22 @@ mod tests {
         SystemTime::UNIX_EPOCH + StdDuration::from_secs(1_000_000)
     }
 
-    fn make_torrent(time_added: i64, dc: f64, wanted: i64, hash: &str) -> TorrentEntry {
+    fn make_torrent(
+        time_added: i64,
+        availability: f64,
+        total_seeds: i64,
+        wanted: i64,
+        hash: &str,
+    ) -> TorrentEntry {
         TorrentEntry {
             info_hash: hash.to_owned(),
             name: hash.to_owned(),
             time_added,
             ratio: Some(2.0),
             is_finished: true,
-            total_seeds: 10,
+            total_seeds,
             total_peers: 5,
-            distributed_copies: dc,
+            availability,
             total_wanted: wanted,
         }
     }

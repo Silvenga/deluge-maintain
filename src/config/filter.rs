@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::time::{Duration, SystemTime};
 use tracing::warn;
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Filter {
     #[serde(with = "humantime_serde", default)]
     pub age: Option<Duration>,
@@ -13,12 +13,28 @@ pub struct Filter {
     pub completed: bool,
     #[serde(default)]
     pub min_total_seeds: Option<u32>,
-    #[serde(default)]
-    pub min_distributed_copies: Option<f32>,
+    #[serde(default = "default_full_availability")]
+    pub min_availability: f32,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Self {
+            age: None,
+            ratio: None,
+            completed: true,
+            min_total_seeds: None,
+            min_availability: 1.0,
+        }
+    }
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_full_availability() -> f32 {
+    1.0
 }
 
 impl Filter {
@@ -64,10 +80,8 @@ impl Filter {
             }
         }
 
-        if let Some(min_dc) = self.min_distributed_copies {
-            if torrent.distributed_copies < (min_dc as f64) {
-                return false;
-            }
+        if torrent.availability < (self.min_availability as f64) {
+            return false;
         }
 
         true
@@ -95,7 +109,7 @@ mod tests {
             is_finished: true,
             total_seeds: 10,
             total_peers: 5,
-            distributed_copies: 2.0,
+            availability: 1.0,
             total_wanted: 1024,
         }
     }
@@ -212,12 +226,13 @@ mod tests {
     }
 
     #[test]
-    fn when_min_distributed_copies_filter_and_dc_below_threshold_then_should_not_match() {
+    fn when_min_availability_filter_and_below_threshold_then_should_not_match() {
         let filter = Filter {
-            min_distributed_copies: Some(3.0),
+            min_availability: 0.75,
             ..Default::default()
         };
-        let torrent = make_torrent();
+        let mut torrent = make_torrent();
+        torrent.availability = 0.5;
 
         assert!(!filter.matches(&torrent, now()));
     }
@@ -229,7 +244,7 @@ mod tests {
             ratio: Some(1.5),
             completed: true,
             min_total_seeds: Some(5),
-            min_distributed_copies: Some(1.0),
+            min_availability: 0.5,
         };
         let torrent = make_torrent();
 
@@ -243,7 +258,7 @@ mod tests {
             ratio: Some(3.0),
             completed: true,
             min_total_seeds: Some(5),
-            min_distributed_copies: Some(1.0),
+            min_availability: 0.5,
         };
         let torrent = make_torrent();
 

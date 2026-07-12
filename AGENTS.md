@@ -31,13 +31,13 @@ At each scheduled tick for a given policy, the engine loops over all configured 
 
 All optional. A torrent must match every specified filter to be eligible for deletion.
 
-| Filter                   | Type                    | Description                                         |
-|--------------------------|-------------------------|-----------------------------------------------------|
-| `age`                    | `humantime::Duration`   | Minimum time since torrent was added (`time_added`) |
-| `ratio`                  | `f32`                   | Minimum seeding ratio                               |
-| `completed`              | `bool` (default `true`) | Only consider completed torrents (`is_finished`)    |
-| `min_total_seeds`        | `u32`                   | Minimum total seeds in swarm (`total_seeds`)        |
-| `min_distributed_copies` | `f32`                   | Minimum distributed copies (`distributed_copies`)   |
+| Filter             | Type                    | Description                                         |
+|--------------------|-------------------------|-----------------------------------------------------|
+| `age`              | `humantime::Duration`   | Minimum time since torrent was added (`time_added`) |
+| `ratio`            | `f32`                   | Minimum seeding ratio                               |
+| `completed`        | `bool` (default `true`) | Only consider completed torrents (`is_finished`)    |
+| `min_total_seeds`  | `u32`                   | Minimum total seeds in swarm (`total_seeds`)        |
+| `min_availability` | `f32`                   | Minimum swarm availability (`availability`)         |
 
 ### Conditions (OR logic)
 
@@ -53,8 +53,9 @@ All optional. If any condition is true, cleanup is triggered. Cleanup stops when
 
 Delete torrents that have the least impact on the swarm first:
 
-1. `distributed_copies` **descending** - most copies = safest to remove
-2. `age` **ascending** - oldest torrent first as tiebreaker (`now - time_added`)
+1. `availability` **descending** - highest availability = safest to remove
+2. `total_seeds` **descending** - most seeded = safest to remove
+3. `age` **ascending** - oldest torrent first as tiebreaker (`now - time_added`)
 
 ### Dry-Run
 

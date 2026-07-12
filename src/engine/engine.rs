@@ -79,12 +79,9 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
 
         for (i, torrent) in to_delete.iter().enumerate() {
             info!(
-                "Deleting torrent '{}' (hash: {}, swarm_copies: {}, size: {}, dry_run: {}).",
-                torrent.name,
-                torrent.info_hash,
-                torrent.distributed_copies,
-                torrent.total_wanted,
-                self.dry_run
+                "Deleting{} torrent [{}].",
+                if self.dry_run { " (dry run)" } else { "" },
+                torrent,
             );
 
             if !self.dry_run {
@@ -118,9 +115,9 @@ mod tests {
     #[tokio::test]
     async fn when_conditions_met_and_not_dry_run_then_torrents_should_be_deleted() {
         let torrents = vec![
-            make_torrent("highest_dc", 5.0),
-            make_torrent("mid_dc", 3.0),
-            make_torrent("lowest_dc", 1.0),
+            make_torrent("highest_avail", 1.0),
+            make_torrent("mid_avail", 0.5),
+            make_torrent("lowest_avail", 0.1),
         ];
         let (factory, removed) = make_factory(torrents);
         let engine = DelugeClientEngine::new(factory, false, Duration::ZERO);
@@ -134,17 +131,17 @@ mod tests {
 
         assert_eq!(removed.len(), 1, "Should delete exactly one torrent");
         assert_eq!(
-            removed[0], "highest_dc",
-            "Should delete the torrent with the highest distributed copies first"
+            removed[0], "highest_avail",
+            "Should delete the torrent with the highest availability first"
         );
     }
 
     #[tokio::test]
     async fn when_dry_run_then_no_torrents_should_be_deleted() {
         let torrents = vec![
-            make_torrent("highest_dc", 5.0),
-            make_torrent("mid_dc", 3.0),
-            make_torrent("lowest_dc", 1.0),
+            make_torrent("highest_avail", 1.0),
+            make_torrent("mid_avail", 0.5),
+            make_torrent("lowest_avail", 0.1),
         ];
         let (factory, removed) = make_factory(torrents);
         let engine = DelugeClientEngine::new(factory, true, Duration::ZERO);
@@ -213,7 +210,7 @@ mod tests {
         }
     }
 
-    fn make_torrent(hash: &str, dc: f64) -> TorrentEntry {
+    fn make_torrent(hash: &str, availability: f64) -> TorrentEntry {
         TorrentEntry {
             info_hash: hash.to_owned(),
             name: hash.to_owned(),
@@ -222,7 +219,7 @@ mod tests {
             is_finished: true,
             total_seeds: 10,
             total_peers: 5,
-            distributed_copies: dc,
+            availability,
             total_wanted: 1024,
         }
     }
@@ -263,16 +260,16 @@ mod tests {
     #[tokio::test]
     async fn when_remove_torrent_fails_then_run_policy_should_return_err_and_stop_deleting() {
         let torrents = vec![
-            make_torrent("highest_dc", 5.0),
-            make_torrent("mid_dc", 3.0),
-            make_torrent("lowest_dc", 1.0),
+            make_torrent("highest_avail", 1.0),
+            make_torrent("mid_avail", 0.5),
+            make_torrent("lowest_avail", 0.1),
         ];
         let removed = Arc::new(Mutex::new(Vec::new()));
         let factory = MockFactory {
             torrents,
             free_space: 1_000_000_000,
             removed: removed.clone(),
-            fail_on_hash: Some("highest_dc".to_owned()),
+            fail_on_hash: Some("highest_avail".to_owned()),
         };
         let engine = DelugeClientEngine::new(factory, false, Duration::ZERO);
 
