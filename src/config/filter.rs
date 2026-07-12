@@ -2,7 +2,6 @@ use crate::service::TorrentEntry;
 use serde::Deserialize;
 use std::time::{Duration, SystemTime};
 use tracing::log::debug;
-use tracing::warn;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Filter {

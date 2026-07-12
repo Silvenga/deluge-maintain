@@ -21,4 +21,5 @@ ENV DELUGE_MAINTAIN_CONFIG=/config/deluge-maintain.toml \
     RUST_LOG=info
 
 USER user
+STOPSIGNAL SIGINT
 ENTRYPOINT ["deluge-maintain"]
