@@ -52,10 +52,6 @@ impl Condition {
 
         false
     }
-
-    pub fn has_any(&self) -> bool {
-        self.available_space.is_some() || self.used_space.is_some() || self.total_count.is_some()
-    }
 }
 
 #[cfg(test)]
@@ -177,22 +173,5 @@ mod tests {
         };
 
         assert!(!condition.is_met(&ctx(1_000_000_000_000, -1, 0)));
-    }
-
-    #[test]
-    fn when_has_any_with_conditions_then_should_return_true() {
-        let condition = Condition {
-            total_count: Some(100),
-            ..Default::default()
-        };
-
-        assert!(condition.has_any());
-    }
-
-    #[test]
-    fn when_has_any_without_conditions_then_should_return_false() {
-        let condition = Condition::default();
-
-        assert!(!condition.has_any());
     }
 }

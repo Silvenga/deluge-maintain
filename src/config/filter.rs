@@ -72,14 +72,6 @@ impl Filter {
 
         true
     }
-
-    #[cfg(test)]
-    fn has_any(&self) -> bool {
-        self.age.is_some()
-            || self.ratio.is_some()
-            || self.min_total_seeds.is_some()
-            || self.min_distributed_copies.is_some()
-    }
 }
 
 #[cfg(test)]
@@ -268,25 +260,5 @@ mod tests {
         torrent.ratio = None;
 
         assert!(filter.matches(&torrent, now()));
-    }
-
-    #[test]
-    fn when_has_any_with_filters_then_should_return_true() {
-        let filter = Filter {
-            ratio: Some(2.0),
-            ..Default::default()
-        };
-
-        assert!(filter.has_any());
-    }
-
-    #[test]
-    fn when_has_any_without_filters_then_should_return_false() {
-        let filter = Filter {
-            completed: true,
-            ..Default::default()
-        };
-
-        assert!(!filter.has_any());
     }
 }
