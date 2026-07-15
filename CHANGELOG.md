@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/Silvenga/deluge-maintain/compare/v0.3.0...v0.4.0) (2026-07-12)
+
+
+### Features
+
+* prevent concurrent policy execution ([4097519](https://github.com/Silvenga/deluge-maintain/commit/4097519947a56d440b0e5351fda54190cb0d3fd8))
+
+
+### Bug Fixes
+
+* fixed non-default logging level in containers ([3da02b6](https://github.com/Silvenga/deluge-maintain/commit/3da02b6f0b106bcbdf71a4da9ef5d334cdca519a))
+
 ## [0.3.0](https://github.com/Silvenga/deluge-maintain/compare/v0.2.0...v0.3.0) (2026-07-12)
 
 
