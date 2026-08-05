@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Silvenga/deluge-maintain/compare/v0.4.0...v0.4.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* fixed fd leak ([1b69f27](https://github.com/Silvenga/deluge-maintain/commit/1b69f2774d055592fa125705e47657655ae275d8))
+
 ## [0.4.0](https://github.com/Silvenga/deluge-maintain/compare/v0.3.0...v0.4.0) (2026-07-12)
 
 
