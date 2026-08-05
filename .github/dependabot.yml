@@ -7,8 +7,10 @@ updates:
     groups:
       security:
         applies-to: security-updates
+        patterns: ["*"]
       version:
         applies-to: version-updates
+        patterns: ["*"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -16,5 +18,7 @@ updates:
     groups:
       security:
         applies-to: security-updates
+        patterns: ["*"]
       version:
         applies-to: version-updates
+        patterns: ["*"]
