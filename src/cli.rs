@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::engine::DelugeClientEngine;
 use crate::scheduler::Scheduler;
-use crate::service::DelugeClientServiceFactory;
+use crate::service::DelugeClientServiceRegistry;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::fs;
@@ -40,7 +40,7 @@ impl Cli {
     pub async fn run() -> Result<()> {
         let (cli, config) = build_config().await?;
         let engine = DelugeClientEngine::new(
-            DelugeClientServiceFactory,
+            DelugeClientServiceRegistry::new(),
             cli.dry_run,
             Duration::from_secs(cli.delete_delay),
         );

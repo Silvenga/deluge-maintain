@@ -5,7 +5,7 @@ use deluge_rpc_client::models::FilterDict;
 use deluge_rpc_client::{DelugeClient, DelugeClientBuilder};
 
 #[async_trait]
-pub trait DelugeService {
+pub trait DelugeService: Send + Sync {
     async fn get_torrents(&self) -> anyhow::Result<Vec<TorrentEntry>>;
     async fn get_free_space(&self) -> anyhow::Result<i64>;
     async fn remove_torrent(&self, hash: &str, remove_data: bool) -> anyhow::Result<()>;

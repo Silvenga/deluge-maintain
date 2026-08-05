@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "deluge-maintain"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -354,9 +354,9 @@ dependencies = [
 
 [[package]]
 name = "deluge-rpc-client"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30a3d260fa7e4ace3facee39a923e214d676a6eb89052dea251e209212ad69e0"
+checksum = "f316d1c507ed4189d3a8a9a378a876e6bba576be0a7d8468874d880724f9fb8a"
 dependencies = [
  "deluge-rpc-models",
  "deluge-rpc-rencode",
@@ -372,9 +372,9 @@ dependencies = [
 
 [[package]]
 name = "deluge-rpc-models"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b851801c0093b5b7c1828b2dddf6ddc98981f9bb42852fdb883f3d977ccd7a85"
+checksum = "f575b729f515413536b5fd378f3dc1bca0451767961891b52753a7187d9ea170"
 dependencies = [
  "deluge-rpc-rencode",
  "serde",
@@ -383,9 +383,9 @@ dependencies = [
 
 [[package]]
 name = "deluge-rpc-rencode"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f6ed9fd082ae48cc7b84bc47bfe8d90c6e246c4f35c46c079e572b5a2dffb3a"
+checksum = "edec88936ef1a19fc16914e5c11b9a2b7e53b20d418e60c399e6017a4a1c3577"
 dependencies = [
  "base64",
  "serde",

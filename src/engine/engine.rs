@@ -1,8 +1,9 @@
 use crate::config::{HostConfig, Policy};
 use crate::engine::plan_deletions::{DeletionPlan, plan_deletions};
-use crate::service::{DelugeService, DelugeServiceFactory};
+use crate::service::{DelugeService, DelugeServiceRegistry};
 use anyhow::Context;
 use async_trait::async_trait;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
 use tracing::{info, warn};
@@ -14,16 +15,16 @@ pub trait Engine: Send + Sync {
     async fn check_connection(&self, host: &HostConfig) -> anyhow::Result<()>;
 }
 
-pub struct DelugeClientEngine<F: DelugeServiceFactory> {
-    service_factory: F,
+pub struct DelugeClientEngine<R: DelugeServiceRegistry> {
+    registry: R,
     dry_run: bool,
     delete_delay: Duration,
 }
 
-impl<F: DelugeServiceFactory> DelugeClientEngine<F> {
-    pub fn new(service_factory: F, dry_run: bool, delete_delay: Duration) -> Self {
+impl<R: DelugeServiceRegistry> DelugeClientEngine<R> {
+    pub fn new(registry: R, dry_run: bool, delete_delay: Duration) -> Self {
         Self {
-            service_factory,
+            registry,
             dry_run,
             delete_delay,
         }
@@ -31,13 +32,11 @@ impl<F: DelugeServiceFactory> DelugeClientEngine<F> {
 }
 
 #[async_trait]
-impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
+impl<R: DelugeServiceRegistry> Engine for DelugeClientEngine<R> {
     async fn run_policy(&self, policy: &Policy, host: &HostConfig) -> anyhow::Result<()> {
         let now = SystemTime::now();
 
-        let service =
-            self.service_factory
-                .create(&host.host, host.port, &host.username, &host.password);
+        let service = self.registry.get(host)?;
 
         let torrents = service.get_torrents().await.context(format!(
             "Failed to fetch torrents for policy '{}'.",
@@ -106,9 +105,7 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
     }
 
     async fn check_connection(&self, host: &HostConfig) -> anyhow::Result<()> {
-        let service =
-            self.service_factory
-                .create(&host.host, host.port, &host.username, &host.password);
+        let service: Arc<dyn DelugeService> = self.registry.get(host)?;
 
         service
             .get_torrents()
@@ -123,7 +120,7 @@ impl<F: DelugeServiceFactory> Engine for DelugeClientEngine<F> {
 mod tests {
     use super::*;
     use crate::config::{Condition, Filter, HostConfig, Policy};
-    use crate::service::{DelugeService, DelugeServiceFactory, TorrentEntry};
+    use crate::service::{DelugeService, DelugeServiceRegistry, TorrentEntry};
     use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
 
@@ -134,8 +131,8 @@ mod tests {
             make_torrent("mid_avail", 0.5),
             make_torrent("lowest_avail", 0.1),
         ];
-        let (factory, removed) = make_factory(torrents);
-        let engine = DelugeClientEngine::new(factory, false, Duration::ZERO);
+        let (registry, removed) = make_registry(torrents);
+        let engine = DelugeClientEngine::new(registry, false, Duration::ZERO);
 
         engine
             .run_policy(&make_policy(), &make_host())
@@ -158,8 +155,8 @@ mod tests {
             make_torrent("mid_avail", 0.5),
             make_torrent("lowest_avail", 0.1),
         ];
-        let (factory, removed) = make_factory(torrents);
-        let engine = DelugeClientEngine::new(factory, true, Duration::ZERO);
+        let (registry, removed) = make_registry(torrents);
+        let engine = DelugeClientEngine::new(registry, true, Duration::ZERO);
 
         engine
             .run_policy(&make_policy(), &make_host())
@@ -200,28 +197,21 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
-    struct MockFactory {
+    struct MockRegistry {
         torrents: Vec<TorrentEntry>,
         free_space: i64,
         removed: Arc<Mutex<Vec<String>>>,
         fail_on_hash: Option<String>,
     }
 
-    impl DelugeServiceFactory for MockFactory {
-        fn create(
-            &self,
-            _host: &str,
-            _port: u16,
-            _username: &str,
-            _password: &str,
-        ) -> impl DelugeService + Send {
-            MockService {
+    impl DelugeServiceRegistry for MockRegistry {
+        fn get(&self, _host: &HostConfig) -> anyhow::Result<Arc<dyn DelugeService>> {
+            Ok(Arc::new(MockService {
                 torrents: self.torrents.clone(),
                 free_space: self.free_space,
                 removed: self.removed.clone(),
                 fail_on_hash: self.fail_on_hash.clone(),
-            }
+            }))
         }
     }
 
@@ -249,15 +239,15 @@ mod tests {
         }
     }
 
-    fn make_factory(torrents: Vec<TorrentEntry>) -> (MockFactory, Arc<Mutex<Vec<String>>>) {
+    fn make_registry(torrents: Vec<TorrentEntry>) -> (MockRegistry, Arc<Mutex<Vec<String>>>) {
         let removed = Arc::new(Mutex::new(Vec::new()));
-        let factory = MockFactory {
+        let registry = MockRegistry {
             torrents,
             free_space: 1_000_000_000,
             removed: removed.clone(),
             fail_on_hash: None,
         };
-        (factory, removed)
+        (registry, removed)
     }
 
     fn make_policy() -> Policy {
@@ -280,13 +270,13 @@ mod tests {
             make_torrent("lowest_avail", 0.1),
         ];
         let removed = Arc::new(Mutex::new(Vec::new()));
-        let factory = MockFactory {
+        let registry = MockRegistry {
             torrents,
             free_space: 1_000_000_000,
             removed: removed.clone(),
             fail_on_hash: Some("highest_avail".to_owned()),
         };
-        let engine = DelugeClientEngine::new(factory, false, Duration::ZERO);
+        let engine = DelugeClientEngine::new(registry, false, Duration::ZERO);
 
         let policy = Policy {
             name: "test-policy".to_owned(),
